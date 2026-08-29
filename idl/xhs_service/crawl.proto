@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package xhs_service.crawl;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "xhs_service/crawl";
+
+service CrawlService {
+  rpc StartCrawlTask(StartCrawlTaskRequest) returns (StartCrawlTaskResponse) {
+    option (google.api.http) = {
+      post: "/v1/organizations/{organization_id}/crawl/tasks"
+      body: "task"
+    };
+    option (api.post) = "/v1/organizations/:organization_id/crawl/tasks";
+  }
+
+  rpc ListCrawlContents(ListCrawlContentsRequest) returns (ListCrawlContentsResponse) {
+    option (google.api.http) = {get: "/v1/organizations/{organization_id}/crawl/contents"};
+    option (api.get) = "/v1/organizations/:organization_id/crawl/contents";
+  }
+
+  rpc GetKeywords(GetKeywordsRequest) returns (GetKeywordsResponse) {
+    option (google.api.http) = {get: "/v1/organizations/{organization_id}/crawl/keywords"};
+    option (api.get) = "/v1/organizations/:organization_id/crawl/keywords";
+  }
+
+  rpc UpdateKeywords(UpdateKeywordsRequest) returns (UpdateKeywordsResponse) {
+    option (google.api.http) = {
+      put: "/v1/organizations/{organization_id}/crawl/keywords"
+      body: "keywords"
+    };
+    option (api.put) = "/v1/organizations/:organization_id/crawl/keywords";
+  }
+}
+
+message StartCrawlTaskRequest {
+  string authorization = 1 [(api.header) = "Authorization"];
+  string organization_id = 2 [(api.path) = "organization_id"];
+  CrawlTaskInput task = 3 [(api.body) = "task"];
+}
+
+message CrawlTaskInput {
+  repeated string keywords = 1;
+}
+
+message StartCrawlTaskResponse {
+  string task_id = 1;
+  string status = 2;
+}
+
+message ListCrawlContentsRequest {
+  string authorization = 1 [(api.header) = "Authorization"];
+  string organization_id = 2 [(api.path) = "organization_id"];
+}
+
+message ListCrawlContentsResponse {
+  repeated CrawlContent contents = 1;
+}
+
+message CrawlContent {
+  string id = 1;
+  string title = 2;
+  string source_keyword = 3;
+}
+
+message GetKeywordsRequest {
+  string authorization = 1 [(api.header) = "Authorization"];
+  string organization_id = 2 [(api.path) = "organization_id"];
+}
+
+message GetKeywordsResponse {
+  repeated string keywords = 1;
+}
+
+message UpdateKeywordsRequest {
+  string authorization = 1 [(api.header) = "Authorization"];
+  string organization_id = 2 [(api.path) = "organization_id"];
+  KeywordInput keywords = 3 [(api.body) = "keywords"];
+}
+
+message KeywordInput {
+  repeated string values = 1;
+}
+
+message UpdateKeywordsResponse {
+  repeated string keywords = 1;
+}

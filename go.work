@@ -1,0 +1,9 @@
+go 1.26.3
+
+use (
+	./xhs_service
+	./auth_service
+	./harness
+	./hertz_gen
+	./hertz_infra
+)

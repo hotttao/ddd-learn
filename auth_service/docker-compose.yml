@@ -1,0 +1,18 @@
+services:
+  auth_service:
+    build:
+      context: ..
+      dockerfile: auth_service/Dockerfile
+    ports:
+      - "8081:8081"
+    env_file:
+      - ../docker-compose/.env.${INFRA:-e2e}
+    environment:
+      SERVER_ADDR: ":8081"
+      POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/auth-service?sslmode=disable
+      LOG_DIR: /media_logs/auth-service
+    volumes:
+      - ../media_logs/auth-service:/media_logs/auth-service
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

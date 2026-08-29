@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package auth_service.authorization;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "auth_service/authorization";
+
+// AuthService 是系统内部稳定的认证鉴权门面。
+// Kratos、Keto 的 HTTP 数据结构只存在于基础设施适配器，不向业务服务泄漏。
+service AuthService {
+  // ResolveSession 将 Kratos Session 归一化为系统 Principal。
+  rpc ResolveSession(ResolveSessionRequest) returns (ResolveSessionResponse) {
+    option (google.api.http) = {get: "/internal/auth/v1/session"};
+    option (api.get) = "/internal/auth/v1/session";
+  }
+
+  // CheckPermission 使用内部 JWT 的 sub 作为主体，不能由请求 body 指定主体。
+  rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse) {
+    option (google.api.http) = {
+      post: "/internal/auth/v1/permissions/check"
+      body: "permission"
+    };
+    option (api.post) = "/internal/auth/v1/permissions/check";
+  }
+}
+
+message ResolveSessionRequest {
+  string cookie = 1 [(api.header) = "Cookie"];
+  string session_token = 2 [(api.header) = "X-Session-Token"];
+}
+
+message ResolveSessionResponse {
+  Principal principal = 1;
+  string session_id = 2;
+  int64 expires_at_unix = 3;
+}
+
+message CheckPermissionRequest {
+  string authorization = 1 [(api.header) = "Authorization"];
+  PermissionCheck permission = 2 [(api.body) = "permission"];
+}
+
+message PermissionCheck {
+  string namespace = 1;
+  string object = 2;
+  string relation = 3;
+}
+
+message CheckPermissionResponse {
+  bool allowed = 1;
+  string decision_id = 2;
+}
+
+message Principal {
+  string subject = 1;
+  string identity_id = 2;
+  string authentication_method = 3;
+}

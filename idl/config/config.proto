@@ -1,0 +1,429 @@
+// idl/config/config.proto
+//
+// Workspace 级共享配置 schema，用 Protobuf 约束：
+// - 每个基础设施依赖 = 一个独立配置段
+// - 每个本服务（app / server）配置 = 一个段
+// - 调用其他服务时 = 在 client map 里加一段
+//
+// 字段命名约定：
+//   - snake_case
+//   - 治理类 message 第一个字段统一 `bool enabled = 1;`
+//   - 服务名 / app 名走 `app.name`，禁止 `service.name`
+//
+// 加载链路：YAML → protojson → proto.Unmarshal(Config)
+syntax = "proto3";
+
+package config;
+
+option go_package = "media_agent/hertz_gen/config";
+
+// ============================================================================
+// 顶层 Config
+// ============================================================================
+//
+// 生命周期规则：
+//   1. 系统新增一个微服务  → 复制本 Config 模板，本服务 app/server 段保持单例
+//   2. 本服务调用某下游服务 → 在 client map 里加一项 key=<下游 app 名>
+//   3. 引入新基础设施依赖   → 在 Config 顶层加一个 *Config 段（如 nacos / kafka）
+//   4. 所有段都可通过 enabled=false 关闭，未启用段不参与初始化
+message Config {
+  // 本服务自描述：app.name 是本服务的逻辑名（被 server 注册、被下游 client 引用）
+  AppConfig app = 1;
+
+  // 服务端配置（监听、超时、registry 行为开关）
+  ServerConfig server = 2;
+
+  // ---- 数据存储 ----
+  DatabaseConfig database = 10;
+  RedisConfig redis = 11;
+
+  // ---- 注册中心 / 服务发现 ----
+  // consul：服务端注册（本服务把自己注册进去）
+  ConsulConfig consul = 20;
+  // consul_discovery：客户端发现（本服务调下游时拿地址）
+  ConsulDiscoveryConfig consul_discovery = 21;
+
+  // ---- 可观测 ----
+  OtelConfig otel = 30;
+  PrometheusConfig prometheus = 31;
+  AccessLogConfig access_log = 32;
+  // 结构化应用日志（zap + lumberjack + zapotel 注入 trace_id/span_id）
+  LogConfig log = 33;
+
+  // ---- 服务端中间件 ----
+  // 限流只在 server 侧实现（rate_limit，可配多条规则，每条一个资源）；
+  // 熔断只在 client 侧实现（client.<app>.circuit_breaker）。
+  RecoveryConfig recovery = 40;
+  RequestIdConfig request_id = 41;
+  CorsConfig cors = 42;
+  repeated RateLimitConfig rate_limit = 43;
+
+  // ---- 运维端点 ----
+  PprofConfig pprof = 50;
+  HealthConfig health = 51;
+
+  // ---- 配置中心（Consul KV 动态加载） ----
+  // 启用后 Loader 会订阅 Consul KV，按 proto option [(config.dynamic)=true]
+  // 标注的字段运行期覆盖基线；未标注字段保持启动期只读。
+  ConsulKVConfig consul_kv = 60;
+
+  // ---- 业务配置（media_auth 专用；其他服务可按需加自己的业务段） ----
+  // media_auth 的认证业务配置：JWT 密钥/有效期、各 token TTL。
+  // JWT_SECRET 与 control_plane 共享（HS256），轮换需双方同步（ADR-0001）。
+  AuthConfig auth = 70;
+  // media_workflow job 配置（max_retries / claim_timeout）
+  JobConfig job = 77;
+  // LDAP 认证配置（auth domain 登录双路之 LDAP）。
+  LdapConfig ldap = 71;
+  // 企微 corp OAuth 配置（wecom domain）。
+  WecomConfig wecom = 72;
+  // MCP OAuth 配置（mcp_oauth domain）。
+  McpOauthConfig mcp_oauth = 73;
+  // internal VerifyToken（mTLS）listener 配置（token internal service）。
+  TokenVerifyConfig token_verify = 74;
+
+  // ---- 业务配置（media_crawler 专用）----
+  // 抓取编排配置（python 路径 / 垫片 / 串行数 等）
+  CrawlerConfig crawler = 75;
+  // 内容数据只读查询配置（爬虫 MySQL 只读 DSN）
+  CrawlDataConfig crawl_data = 76;
+
+  // ---- 客户端：调用其他服务 ----
+  // key = 下游 app.name；value = 该下游 client 的治理配置。
+  // 新增下游 = 在这里加一项；不再调用 = 删一项。
+  map<string, AppClientConfig> client = 100;
+}
+
+// ============================================================================
+// 本服务自描述
+// ============================================================================
+message AppConfig {
+  // 服务逻辑名（用于注册到 registry、被其他服务的 client.<name> 引用）
+  string name = 1;
+  // 版本号，注入到 trace / metrics / log
+  string version = 2;
+  // 部署环境：dev / staging / prod
+  string env = 3;
+}
+
+// ============================================================================
+// 服务端
+// ============================================================================
+message ServerConfig {
+  bool enabled = 1;
+  // 监听地址，例如 ":8888" 或 "0.0.0.0:8888"
+  string address = 2;
+  // Hertz server-level 超时
+  TimeoutConfig timeout = 3;
+}
+
+// ============================================================================
+// 数据存储
+// ============================================================================
+message DatabaseConfig {
+  bool enabled = 1;
+  string driver = 2;          // mysql / postgres / sqlite
+  string dsn = 3;
+  int32 max_open_conns = 4;
+  int32 max_idle_conns = 5;
+  int32 conn_max_lifetime_seconds = 6;
+  bool migrate_on_start = 7;  // 启动期自动执行迁移（幂等）；local/dev 默认 true，prod 可关由运维手动 migrate
+}
+
+message RedisConfig {
+  bool enabled = 1;
+  string address = 2;         // host:port
+  string password = 3;
+  int32 db = 4;
+  int32 pool_size = 5;
+  int32 dial_timeout_ms = 6;
+}
+
+// ============================================================================
+// 注册中心：服务端注册
+// ============================================================================
+message ConsulConfig {
+  bool enabled = 1;
+  string address = 2;                  // consul agent: host:port
+  string scheme = 3;                   // http / https
+  string token = 4;
+  // 注册元数据
+  string service_address = 10;         // 对外可达地址（覆盖 address 的 host）
+  int32 service_port = 11;             // 对外可达端口
+  repeated string tags = 12;
+  string health_check_path = 13;       // 例如 "/health"
+  int32 health_check_interval_seconds = 14;
+  int32 health_check_timeout_seconds = 15;
+  int32 deregister_critical_after_seconds = 16;
+}
+
+// ============================================================================
+// 注册中心：客户端发现
+// ============================================================================
+message ConsulDiscoveryConfig {
+  bool enabled = 1;
+  string address = 2;
+  string scheme = 3;
+  string token = 4;
+  int32 refresh_interval_seconds = 10;
+  string datacenter = 11;
+}
+
+// ============================================================================
+// 可观测
+// ============================================================================
+message OtelConfig {
+  bool enabled = 1;
+  string export_endpoint = 2;          // OTLP collector，例如 "localhost:4317"
+  bool insecure = 3;
+  double sample_ratio = 4;             // 0.0 - 1.0
+}
+
+message PrometheusConfig {
+  bool enabled = 1;
+  string address = 2;                  // 暴露 /metrics 的监听地址，例如 ":9091"
+  string path = 3;                     // 例如 "/metrics"
+}
+
+message AccessLogConfig {
+  bool enabled = 1;
+  // 例如 "[${time}] ${status} - ${latency} ${method} ${path}"
+  string format = 2;
+  string time_format = 3;
+}
+
+// 结构化应用日志：zap + lumberjack 落盘，obs-opentelemetry/logging/zap 桥接
+// 自动从 context 注入 trace_id / span_id。与 access_log（访问日志中间件）职责分离。
+message LogConfig {
+  bool enabled = 1;
+  string level = 2;        // debug / info / warn / error，默认 info
+  string dir = 3;          // 日志目录，例如 /home/.../media_logs/media_example
+  string filename = 4;     // 默认 app.log
+  int32 max_size_mb = 5;   // lumberjack 单文件上限 MB，默认 100
+  int32 max_backups = 6;   // 保留旧文件数，默认 10
+  int32 max_age_days = 7;  // 保留天数，默认 7
+  bool compress = 8;       // 旧文件 gzip，默认 true
+  bool console = 9;        // 同时写 stdout，默认 true（e2e 友好）
+}
+
+// ============================================================================
+// 服务端中间件
+// ============================================================================
+message RecoveryConfig {
+  bool enabled = 1;
+  bool print_stack = 2;
+}
+
+message RequestIdConfig {
+  bool enabled = 1;
+  string header = 2;                   // 默认 "X-Request-ID"
+}
+
+message CorsConfig {
+  bool enabled = 1;
+  repeated string allow_origins = 2;
+  repeated string allow_methods = 3;
+  repeated string allow_headers = 4;
+  bool allow_credentials = 5;
+  int32 max_age_seconds = 6;
+}
+
+message RateLimitConfig {
+  bool enabled = 1;
+  // 资源名，如 "media-example:GET:/hello"；空=该条不下发规则（middleware 仍按动态资源名提取）
+  string resource = 2;
+  // sentinel: 单位时间窗口内的阈值（QPS）
+  double threshold = 3;
+  int32 stat_interval_ms = 4;
+  // sentinel token 计算策略：direct / warmup / memory_adaptive（默认 direct）
+  string token_calculate_strategy = 5;
+  // sentinel 控制行为：reject / throttling（默认 reject）
+  string control_behavior = 6;
+  // throttling（匀速排队）最大排队时间；仅 control_behavior=throttling 生效
+  int32 max_queueing_time_ms = 7;
+  // warmup 预热时长（秒）；仅 token_calculate_strategy=warmup 生效，须 >0
+  int32 warm_up_period_sec = 8;
+  // warmup 冷启动因子；须 >1（默认 3）
+  int32 warm_up_cold_factor = 9;
+}
+
+message CircuitBreakerConfig {
+  bool enabled = 1;
+  // sentinel circuit breaker 策略：slow_request_ratio / error_ratio / error_count
+  string strategy = 2;
+  double threshold = 3;
+  int32 stat_interval_ms = 4;
+  int32 retry_timeout_ms = 5;          // 半开状态探测间隔
+  int32 min_request_amount = 6;
+  // slow_request_ratio 策略下判定"慢请求"的 RT 上限（ms）；0 表示所有 rt>0 都算慢
+  int32 max_allowed_rt_ms = 7;
+}
+
+// ============================================================================
+// 运维端点
+// ============================================================================
+message PprofConfig {
+  bool enabled = 1;
+  string prefix = 2;                   // 默认 "/debug/pprof"
+}
+
+message HealthConfig {
+  bool enabled = 1;
+  string path = 2;                     // 默认 "/health"
+}
+
+// ============================================================================
+// 配置中心：Consul KV
+// ============================================================================
+//
+// 后端锁定为 Consul KV（与 consul: / consul_discovery: 的命名 pattern 一致，
+// 后端编码进字段名）。YAGNI：未来若引入 Nacos / Apollo，新增独立顶级块和对应
+// proto message，不在本 message 里加 backend 判别字段。
+//
+// 启用后 Loader 会订阅 Consul KV 的 blocking-query，KV value 必须是 JSON 文本
+// （与 protojson 兼容），变更触发 reload + 订阅者回调。
+message ConsulKVConfig {
+  bool enabled = 1;
+  // Consul agent 地址（host:port）
+  string address = 2;
+  // Consul KV key，例如 "media-example/config"
+  string data_id = 3;
+}
+
+// ============================================================================
+// 业务配置：media_auth 认证（spec §7）
+// ============================================================================
+message AuthConfig {
+  // JWT 签名密钥（HS256），与 control_plane 共享；为空时启动报错。
+  string jwt_secret = 1;
+  // session JWT 有效期（秒），默认 86400（24h）
+  int32 jwt_expires_in_seconds = 2;
+  // oauth access token 有效期（秒），默认 3600（1h）
+  int32 access_token_expires_in_seconds = 3;
+  // oauth refresh token 有效期（天），默认 30
+  int32 refresh_token_expires_in_days = 4;
+  // oauth authorization code 有效期（分钟），默认 10
+  int32 auth_code_expires_in_minutes = 5;
+  // OAuth client_secret（下游服务作为机密 client 时的 secret）
+  string oauth_client_secret = 6;
+}
+
+message LdapConfig {
+  bool enabled = 1;
+  string url = 2;                 // ldap://host:port
+  string bind_dn = 3;             // admin bind DN
+  string bind_password = 4;
+  string search_base = 5;
+  string search_filter = 6;       // 如 (objectClass=inetOrgPerson)
+  string attr_name = 7;           // 默认 cn
+  string attr_username = 8;       // 默认 sn
+  string attr_email = 9;          // 默认 mail
+}
+
+message WecomConfig {
+  bool enabled = 1;
+  string corp_id = 2;
+  string corp_secret = 3;
+  string agent_id = 4;
+}
+
+message McpOauthConfig {
+  int32 pending_auth_ttl_seconds = 1;     // 默认 600
+  int32 default_token_ttl_seconds = 2;    // 默认 1800
+  int32 refresh_fail_threshold = 3;       // 默认 3
+  int32 refresh_fail_grace_seconds = 4;   // 默认 600
+}
+
+message TokenVerifyConfig {
+  bool enabled = 1;
+  string address = 2;             // internal mTLS listener，如 :8889
+}
+
+// ============================================================================
+// 通用：超时 / 重试
+// ============================================================================
+message TimeoutConfig {
+  bool enabled = 1;
+  int32 connect_timeout_ms = 2;        // 仅 client 用
+  int32 read_timeout_ms = 3;
+  int32 write_timeout_ms = 4;
+  int32 request_timeout_ms = 5;        // server / client 整体超时
+}
+
+message RetryConfig {
+  bool enabled = 1;
+  int32 max_attempt_times = 2;         // Hertz retry.WithMaxAttemptTimes
+  int32 initial_delay_ms = 3;
+  int32 max_delay_ms = 4;
+  double delay_multiplier = 5;
+  // 触发重试的 HTTP 状态码白名单（空则按 Hertz 默认）
+  repeated int32 retry_status_codes = 6;
+}
+
+// ============================================================================
+// 客户端：调用其他服务
+// ============================================================================
+//
+// 一个 key = 一个下游 app；本服务通过 clients.<KEY>() 拿到 client 实例。
+message AppClientConfig {
+  bool enabled = 1;
+  // 下游服务的逻辑名（必须与下游 app.name 一致）
+  string service_name = 2;
+  // 走域名直连时使用；走 discovery 时留空
+  string base_domain = 3;
+  // 走服务发现时启用
+  bool use_discovery = 4;
+
+  TimeoutConfig timeout = 10;
+  RetryConfig retry = 11;
+  // 熔断只在 client 侧实现；client 不做限流（限流归 server）。见 Config.rate_limit 注释。
+  CircuitBreakerConfig circuit_breaker = 12;
+
+  // 负载均衡策略：weighted_random / round_robin / consistent_hash
+  string load_balance = 20;
+}
+
+// ============================================================================
+// 业务配置：media_crawler 抓取编排
+// ============================================================================
+//
+// CrawlerConfig 控制 subprocess 调用 Python 爬虫的行为。爬虫本身是独立模块
+// （MediaCrawlerPro-Python），media_crawler 不改其代码，经 mcp_runner.py 垫片
+// 注入 CLI + env 后 subprocess 启动。详见 ADR-0003（子进程隔离）。
+message CrawlerConfig {
+  bool enabled = 1;
+  // Python 解释器路径，如 "python3" 或 venv 内绝对路径
+  string python_path = 2;
+  // mcp_runner.py 垫片路径（爬虫项目内）
+  string runner_path = 3;
+  // 爬虫项目根目录（subprocess cwd；checkpoint/data 落在此）
+  string work_dir = 4;
+  // 全局串行并发数（默认 1，同时仅一个爬虫子进程，防账号/代理风控）
+  int32 max_serial = 5;
+  // 捕获子进程 stdout/stderr 尾部行数（get_crawl_status 返回）
+  int32 log_tail_lines = 6;
+  // 子进程默认超时秒（0=不限）
+  int32 timeout_seconds = 7;
+  // 默认 on_busy 策略：queue(默认) / reject
+  string default_on_busy = 8;
+}
+
+// CrawlDataConfig —— 跨库只读查爬虫 MySQL 的连接配置。
+// 独立于本服务自有的 database 段（PG）：PG 存 job 元数据，MySQL 存爬虫内容数据。
+// 双库分离不另立 ADR（新服务改库零成本，不满足"难回退"），见 crawl_data domain 双库说明。
+message CrawlDataConfig {
+  bool enabled = 1;
+  // 爬虫 MySQL 只读 DSN（建议只读账号 mc_reader）
+  string dsn = 2;
+  int32 max_open_conns = 3;
+  int32 max_idle_conns = 4;
+  // 爬虫 checkpoint 目录（相对 work_dir 或绝对），用于进度推算/续爬
+  string checkpoint_dir = 5;
+}
+
+message JobConfig {
+  // 最大重试次数，默认 3
+  int32 max_retries = 1;
+  // CLAIMED 超时秒数（worker 崩溃保护），默认 600
+  int32 claim_timeout_seconds = 2;
+}
