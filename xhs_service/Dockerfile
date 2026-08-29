@@ -18,6 +18,5 @@ WORKDIR /app
 COPY --from=builder /out/xhs_service /app/xhs_service
 COPY xhs_service/migrations/ /app/migrations/
 COPY xhs_service/conf/ /app/conf/
-COPY xhs_service/.env /app/.env
 EXPOSE 8082
 ENTRYPOINT ["/app/xhs_service"]

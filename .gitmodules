@@ -1,0 +1,12 @@
+[submodule "third_party/ory/kratos"]
+	path = third_party/ory/kratos
+	url = git@github.com:ory/kratos.git
+[submodule "third_party/ory/oathkeeper"]
+	path = third_party/ory/oathkeeper
+	url = git@github.com:ory/oathkeeper.git
+[submodule "third_party/ory/keto"]
+	path = third_party/ory/keto
+	url = git@github.com:ory/keto.git
+[submodule "third_party/ory/talos"]
+	path = third_party/ory/talos
+	url = git@github.com:ory/talos.git

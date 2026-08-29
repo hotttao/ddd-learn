@@ -8,7 +8,8 @@ server:
   address: ${SERVER_ADDR:-:8082}
 
 database:
-  enabled: true
+  # The auth/authz example uses an in-process mock repository; no database is required.
+  enabled: false
   driver: postgres
   dsn: ${POSTGRES_DSN:-postgres://media_auth:media_auth@127.0.0.1:5432/xhs-service?sslmode=disable}
   max_open_conns: 50
@@ -20,6 +21,21 @@ consul:
 
 consul_kv:
   enabled: ${CONSUL_KV_ENABLED:-false}
+
+internal_jwt:
+  enabled: ${INTERNAL_JWT_ENABLED:-true}
+  issuer: ${INTERNAL_JWT_ISSUER:-oathkeeper}
+  audiences: ["internal-api"]
+  jwks_url: ${INTERNAL_JWKS_URL:-http://127.0.0.1:4456/.well-known/jwks.json}
+  allowed_algorithms: ["RS256"]
+  refresh_interval_seconds: 300
+  http_timeout_ms: 2000
+  clock_skew_seconds: 30
+
+keto:
+  enabled: ${KETO_ENABLED:-true}
+  read_url: ${KETO_READ_URL:-http://127.0.0.1:4466}
+  request_timeout_ms: 2000
 
 otel:
   enabled: ${OTEL_ENABLED:-false}

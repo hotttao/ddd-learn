@@ -1,0 +1,11 @@
+serve:
+  read:
+    port: 4466
+  write:
+    port: 4467
+namespaces:
+  - id: 0
+    name: XhsWorkspace
+    schema: file:///etc/config/keto/namespaces.ts
+dsn: memory://
+

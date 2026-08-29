@@ -1,0 +1,79 @@
+name: ory-authz-demo
+
+services:
+  postgres:
+    image: m.daocloud.io/docker.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_USER: ory
+      POSTGRES_PASSWORD: ory
+      POSTGRES_DB: ory
+    volumes: [ory-postgres:/var/lib/postgresql/data]
+
+  kratos:
+    build:
+      context: ../../third_party/ory/kratos
+      dockerfile: .docker/Dockerfile-build
+    command: serve -c /etc/config/kratos/kratos.yml --dev
+    depends_on: [postgres]
+    volumes:
+      - ../../third_party/ory/kratos/contrib/quickstart/kratos/email-password:/etc/config/kratos:ro
+    ports: ["4433:4433", "4434:4434"]
+
+  keto:
+    build:
+      context: ../../third_party/ory/keto
+      dockerfile: .docker/Dockerfile-build
+    command: serve -c /etc/config/keto/keto.yml
+    volumes: [./keto:/etc/config/keto:ro]
+    ports: ["4466:4466", "4467:4467"]
+
+  keto-seed:
+    image: m.daocloud.io/docker.io/curlimages/curl:8.10.1
+    depends_on: [keto]
+    entrypoint: ["/bin/sh", "-c"]
+    command: >-
+      until curl -sf http://keto:4466/health/ready; do sleep 1; done;
+      curl -sf -X PUT http://keto:4467/admin/relation-tuples -H 'content-type: application/json'
+      --data '{"namespace":"XhsWorkspace","object":"organization:G","relation":"editor","subject_id":"Alice"}';
+      curl -sf -X PUT http://keto:4467/admin/relation-tuples -H 'content-type: application/json'
+      --data '{"namespace":"XhsWorkspace","object":"organization:G","relation":"member","subject_id":"Bob"}'
+
+  talos:
+    build:
+      context: ../../third_party/ory/talos
+      dockerfile: .docker/Dockerfile-local-build
+    command: serve --config /etc/talos/config.yaml
+    volumes:
+      - ./talos/config.oss.yaml:/etc/talos/config.yaml:ro
+      - ../../third_party/ory/talos/deployments/docker/config/jwks.json:/etc/talos/jwks.json:ro
+    ports: ["4420:4420"]
+
+  oathkeeper:
+    build:
+      context: ../../third_party/ory/oathkeeper
+      dockerfile: .docker/Dockerfile-build
+    command: serve proxy -c /etc/config/oathkeeper/config.yaml
+    depends_on: [kratos, keto, talos, xhs-service]
+    volumes:
+      - ./oathkeeper/config.yaml:/etc/config/oathkeeper/config.yaml:ro
+      - ./oathkeeper/rules.yaml:/etc/config/oathkeeper/rules.yaml:ro
+    ports: ["4455:4455"]
+
+  xhs-service:
+    build:
+      context: ../..
+      dockerfile: xhs_service/Dockerfile
+    environment:
+      CONFIG_FILE: /app/conf/local.yaml
+      INTERNAL_JWKS_URL: http://oathkeeper:4455/.well-known/jwks.json
+      KETO_READ_URL: http://keto:4466
+    depends_on: [keto]
+    ports: ["8082:8082"]
+
+  demo-ui:
+    image: m.daocloud.io/docker.io/library/nginx:1.27-alpine
+    volumes: [./web:/usr/share/nginx/html:ro]
+    ports: ["3011:80"]
+
+volumes:
+  ory-postgres:

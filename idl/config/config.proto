@@ -67,6 +67,12 @@ message Config {
   // 标注的字段运行期覆盖基线；未标注字段保持启动期只读。
   ConsulKVConfig consul_kv = 60;
 
+  // ---- 内部服务身份 ----
+  // Oathkeeper 签发的短期 JWT 验证配置。每个服务独立消费同一 schema，
+  // 但 issuer、audience 与 JWKS 来源必须在各服务配置中显式声明。
+  InternalJWTConfig internal_jwt = 61;
+  KetoConfig keto = 62;
+
   // ---- 业务配置（media_auth 专用；其他服务可按需加自己的业务段） ----
   // media_auth 的认证业务配置：JWT 密钥/有效期、各 token TTL。
   // JWT_SECRET 与 control_plane 共享（HS256），轮换需双方同步（ADR-0001）。
@@ -288,6 +294,28 @@ message ConsulKVConfig {
   string address = 2;
   // Consul KV key，例如 "media-example/config"
   string data_id = 3;
+}
+
+// ============================================================================
+// 内部服务 JWT
+// ============================================================================
+message InternalJWTConfig {
+  bool enabled = 1;
+  string issuer = 2;
+  repeated string audiences = 3;
+  // 支持 https://、http://（仅本地开发）与 file://；生产应使用 HTTPS 或只读挂载文件。
+  string jwks_url = 4;
+  // 只允许非对称签名算法，例如 RS256、ES256、EdDSA；禁止 none 与 HMAC。
+  repeated string allowed_algorithms = 5;
+  int32 refresh_interval_seconds = 6;
+  int32 http_timeout_ms = 7;
+  int32 clock_skew_seconds = 8;
+}
+
+message KetoConfig {
+  bool enabled = 1;
+  string read_url = 2;
+  int32 request_timeout_ms = 3;
 }
 
 // ============================================================================
