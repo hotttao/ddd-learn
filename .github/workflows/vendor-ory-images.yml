@@ -1,0 +1,47 @@
+name: Vendor Ory images to GHCR
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"
+
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - upstream: oryd/kratos:v1.3.1
+            target: kratos
+            version: v1.3.1
+          - upstream: oryd/hydra:v2.3.0
+            target: hydra
+            version: v2.3.0
+          - upstream: oryd/talos:v26.2.0
+            target: talos
+            version: v26.2.0
+          - upstream: oryd/oathkeeper:v0.40.9
+            target: oathkeeper
+            version: v0.40.9
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull upstream and push immutable tag
+        env:
+          UPSTREAM: ${{ matrix.upstream }}
+          TARGET: ghcr.io/${{ github.repository_owner }}/ory-${{ matrix.target }}
+          VERSION: ${{ matrix.version }}
+        run: |
+          set -euo pipefail
+          docker pull "$UPSTREAM"
+          docker tag "$UPSTREAM" "$TARGET:$VERSION"
+          docker push "$TARGET:$VERSION"
+          echo "Pushed $TARGET:$VERSION"
