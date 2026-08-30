@@ -10,19 +10,21 @@ services:
     volumes: [ory-postgres:/var/lib/postgresql/data]
 
   kratos:
-    build:
-      context: ../../third_party/ory/kratos
-      dockerfile: .docker/Dockerfile-build
+    image: ghcr.io/hotttao/ory-kratos:v26.2.0
     command: serve -c /etc/config/kratos/kratos.yml --dev
     depends_on: [postgres]
     volumes:
       - ../../third_party/ory/kratos/contrib/quickstart/kratos/email-password:/etc/config/kratos:ro
     ports: ["4433:4433", "4434:4434"]
 
+  hydra:
+    image: ghcr.io/hotttao/ory-hydra:v26.2.0
+    command: serve all --dev
+    depends_on: [postgres]
+    ports: ["4444:4444", "4445:4445"]
+
   keto:
-    build:
-      context: ../../third_party/ory/keto
-      dockerfile: .docker/Dockerfile-build
+    image: ghcr.io/hotttao/ory-keto:v26.2.0
     command: serve -c /etc/config/keto/keto.yml
     volumes: [./keto:/etc/config/keto:ro]
     ports: ["4466:4466", "4467:4467"]
@@ -49,9 +51,7 @@ services:
     ports: ["4420:4420"]
 
   oathkeeper:
-    build:
-      context: ../../third_party/ory/oathkeeper
-      dockerfile: .docker/Dockerfile-build
+    image: ghcr.io/hotttao/ory-oathkeeper:v26.2.0
     command: serve proxy -c /etc/config/oathkeeper/config.yaml
     depends_on: [kratos, keto, talos, xhs-service]
     volumes:

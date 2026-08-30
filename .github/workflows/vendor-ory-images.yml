@@ -15,18 +15,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - upstream: oryd/kratos:v1.3.1
+          - upstream: oryd/kratos:v26.2.0
             target: kratos
-            version: v1.3.1
-          - upstream: oryd/hydra:v2.3.0
+            version: v26.2.0
+          - upstream: oryd/hydra:v26.2.0
             target: hydra
-            version: v2.3.0
+            version: v26.2.0
+          - upstream: oryd/keto:v26.2.0
+            target: keto
+            version: v26.2.0
           - upstream: oryd/talos:v26.2.0
             target: talos
             version: v26.2.0
-          - upstream: oryd/oathkeeper:v0.40.9
+          - upstream: oryd/oathkeeper:v26.2.0
             target: oathkeeper
-            version: v0.40.9
+            version: v26.2.0
     steps:
       - uses: docker/login-action@v3
         with:
