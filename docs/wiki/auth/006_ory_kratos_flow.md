@@ -278,3 +278,45 @@ sessions/whoami                   读取登录状态，不负责提交认证凭�
 - Kratos 日志中的 `path`、`status_code` 和 Flow ID。
 
 不要把密码、验证码、CSRF Token、Session Cookie 或完整 Logout Token 写入文档和日志。
+
+## 第 9 步：端到端验证清单
+
+下面的顺序适合在浏览器中从一个干净的匿名状态开始验证。Network 面板建议开启 **Preserve log**，并在每个流程开始前记下当前是否存在 `ory_kratos_session` Cookie。
+
+### 验收顺序
+
+| 顺序 | 验证项 | 起始页面 | 必须观察的请求 | 验收结果 |
+| --- | --- | --- | --- | --- |
+| 1 | 注册 | `/registration` | `GET /kratos/self-service/registration/browser`、`GET /flows?id=...`、`POST /kratos/self-service/registration?flow=...` | 注册成功后收到 `ory_kratos_session`，跳转 `/`，`GET /kratos/sessions/whoami` 返回 `200` |
+| 2 | 当前 Session | `/` | `GET /kratos/sessions/whoami` | 页面显示当前 Identity；刷新页面后仍保持登录 |
+| 3 | 主动修改密码 | `/settings` | `GET /kratos/self-service/settings/browser`、`GET /settings/flows?id=...`、`POST /kratos/self-service/settings?flow=...` | 密码更新成功，按 `continue_with.redirect_browser_to` 跳转 `/` |
+| 4 | 注销 | `/` | `GET /kratos/self-service/logout/browser`、随后访问返回的 `logout_url` | Session 失效，跳转 `/login`，后续 `GET /kratos/sessions/whoami` 返回 `401` |
+| 5 | 使用新密码登录 | `/login` | `GET /kratos/self-service/login/browser`、`GET /login/flows?id=...`、`POST /kratos/self-service/login?flow=...` | 登录成功后重新获得 `ory_kratos_session`，跳转 `/` |
+| 6 | Recovery 申请验证码 | `/recovery` | `GET /kratos/self-service/recovery/browser`、`GET /recovery/flows?id=...`、`POST /kratos/self-service/recovery?flow=...` | Recovery Flow 进入 `sent_email`，Courier 日志出现投递记录，Mailpit 收到邮件 |
+| 7 | Recovery 验证码 | `/recovery?flow=...` | 再次 `POST /kratos/self-service/recovery?flow=...` | 验证成功，返回 `browser_location_change_required` 或 `303`，跳转 `/settings?flow=...` |
+| 8 | Recovery 设置密码 | `/settings?flow=...` | `GET /kratos/self-service/settings/flows?id=...`、`POST /kratos/self-service/settings?flow=...` | 密码更新成功，跳转 `/`，之后可以使用新密码登录 |
+
+### 各流程的失败分支
+
+验证失败时，不应只看页面最终显示的文字，还要根据 HTTP 响应判断失败发生在哪一层：
+
+| 现象 | 预期请求结果 | 含义 |
+| --- | --- | --- |
+| 注册邮箱已存在 | Registration `POST` 返回 `400`，Flow 中有 `ui.messages` 或 Node 错误 | Identity 已存在，Flow 仍可继续显示错误 |
+| 登录密码错误 | Login `POST` 返回 `400`，返回更新后的 Login Flow | 没有创建新的 Session |
+| Recovery 邮箱没有账号 | Recovery `POST` 通常仍返回通用结果 | 防止通过响应区分邮箱是否注册 |
+| 验证码错误或过期 | Recovery `POST` 返回错误 Flow | 仍停留在 Recovery Flow，不能直接进入 Settings |
+| Flow 已过期 | 读取 Flow 返回 `404` 或 `410` | 必须重新访问对应的 `/browser` 创建入口 |
+| Settings Session 不新鲜 | Settings 提交返回 `403 session_refresh_required` 或浏览器跳转 Login Refresh Flow | 需要重新证明当前身份，不是重新注册账号 |
+| 注销后访问受保护页面 | `GET /kratos/sessions/whoami` 返回 `401` | 前端应进入匿名状态 |
+
+### 验证完成标准
+
+本模块的端到端验证在同时满足以下条件后才算完成：
+
+- 注册、登录和注销都能改变服务端 Session，而不只是改变前端显示状态；
+- 刷新首页后，页面通过 `/kratos/sessions/whoami` 恢复或清除登录状态；
+- 主动 Settings 和 Recovery Settings 都能成功修改密码，并回到首页；
+- Recovery 邮件能在 Mailpit 中看到，且验证码错误、过期和成功分支都能区分；
+- 每一个 Browser Flow 都能在 Network 面板中对应到创建、读取、提交三个阶段；
+- 所有失败分支都保留 Kratos 返回的 Flow 错误，不由前端自行替换成无法定位原因的通用成功状态。
