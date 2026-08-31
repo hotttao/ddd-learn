@@ -221,6 +221,11 @@ button.welcome-card__button:disabled {
 	box-shadow: 0 2.5rem 6rem rgba(0, 0, 0, 0.35);
 }
 
+.auth-card--settings {
+	max-height: min(48rem, calc(100vh - 9rem));
+	overflow: auto;
+}
+
 .auth-element-card {
 	display: grid;
 	width: 100%;
@@ -425,6 +430,20 @@ button.welcome-card__button:disabled {
 
 .welcome-card__button--secondary {
 	background: rgba(255, 255, 255, 0.06);
+}
+
+.welcome-card__recovery {
+	display: inline-block;
+	margin-top: 1.25rem;
+	color: var(--app-color-link);
+	font-size: 0.85rem;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.welcome-card__recovery:hover {
+	color: var(--app-color-link-hover);
+	text-decoration: underline;
 }
 
 .session-card {

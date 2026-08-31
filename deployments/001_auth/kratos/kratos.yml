@@ -82,6 +82,10 @@ selfservice:
       ui_url: http://192.168.2.41:5173/settings
       # 高权限操作允许复用当前 Session 的最长时间。
       privileged_session_max_age: 15m
+      after:
+        password:
+          # 密码修改成功后，在 continue_with 中要求浏览器返回 Account UI 首页。
+          default_browser_return_url: http://192.168.2.41:5173/
 
     verification:
       # 开启邮箱验证 Flow。

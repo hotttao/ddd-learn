@@ -13,6 +13,6 @@ Account UI 直接消费 Kratos Public API，不增加自定义认证后端或 BF
 4. 使用 Ory Elements 创建 Account UI，实现注册和登录。
 5. 实现注销和当前 Session 查询。
 6. 添加独立 Kratos Courier Worker 和 Mailpit，验证教学环境的异步邮件投递基础设施。
-7. 使用 Ory Elements 实现 Recovery Flow，通过邮箱验证码重置密码。
-8. 使用 Ory Elements 实现 Settings Flow，允许已登录用户修改密码。
+7. 使用 Ory Elements 实现 Recovery Flow，完成邮箱验证码挑战，并通过 Recovery 授权的 Settings Flow 设置新密码。
+8. 完善 Settings Flow 入口，允许已登录用户主动修改密码。
 9. 验证注册、登录、注销、Session 查询、密码恢复和密码修改流程，补充本模块文档。

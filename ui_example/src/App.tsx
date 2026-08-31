@@ -2,6 +2,8 @@ import { Link, Route, Routes } from "react-router-dom";
 import { getIdentitySummary } from "@/domains/auth/lib/session";
 import { useOrySession } from "@/foundation/providers/ory-session";
 import AuthFlowPage from "@/pages/auth/AuthFlowPage";
+import RecoveryFlowPage from "@/pages/auth/RecoveryFlowPage";
+import RecoverySettingsPage from "@/pages/auth/RecoverySettingsPage";
 import SessionPage from "@/pages/auth/SessionPage";
 
 function AuthNavigation() {
@@ -56,6 +58,8 @@ export default function App() {
             path="/registration"
             element={<AuthFlowPage kind="registration" />}
           />
+          <Route path="/recovery" element={<RecoveryFlowPage />} />
+          <Route path="/settings" element={<RecoverySettingsPage />} />
           <Route path="*" element={<SessionPage />} />
         </Routes>
       </main>

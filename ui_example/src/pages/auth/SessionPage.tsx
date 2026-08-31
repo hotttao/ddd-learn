@@ -54,6 +54,9 @@ export default function SessionPage() {
             Create account
           </Link>
         </div>
+        <Link className="welcome-card__recovery" to="/recovery">
+          Recover an existing account
+        </Link>
       </section>
     );
   }
