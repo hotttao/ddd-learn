@@ -1,0 +1,57 @@
+/* 只影响认证页面，避免认证主题污染业务页面。 */
+.auth-theme,
+.auth-theme .ory-elements {
+	--font-sans: var(--app-font-sans);
+
+	--interface-background-brand-primary: var(--app-color-primary);
+	--interface-background-brand-primary-hover: var(--app-color-primary-hover);
+	--interface-background-default-primary: var(--app-color-surface);
+	--interface-background-default-primary-hover: var(--app-color-surface-soft-hover);
+	--interface-background-default-secondary: var(--app-color-surface-soft);
+	--interface-background-default-secondary-hover: var(--app-color-surface-soft-hover);
+
+	--interface-border-brand-brand: var(--app-color-primary);
+	--interface-border-default-primary: var(--app-color-border);
+
+	--interface-foreground-brand-on-primary: var(--app-color-text);
+	--interface-foreground-brand-primary: var(--app-color-link);
+	--interface-foreground-default-primary: var(--app-color-text);
+	--interface-foreground-default-secondary: var(--app-color-text-secondary-strong);
+	--interface-foreground-default-tertiary: var(--app-color-text-muted);
+	--button-link-brand-brand: var(--app-color-link);
+	--button-link-brand-brand-hover: var(--app-color-link-hover);
+
+	--button-primary-background-default: var(--app-color-primary);
+	--button-primary-background-hover: var(--app-color-primary-hover);
+	--button-primary-foreground-default: var(--app-color-text);
+	--button-primary-foreground-hover: var(--app-color-white);
+	--button-secondary-background-default: var(--app-color-surface-soft);
+	--button-secondary-background-hover: var(--app-color-surface-soft-hover);
+	--button-secondary-border-default: var(--app-color-border);
+	--button-secondary-border-hover: var(--app-color-border-strong);
+	--button-secondary-foreground-default: var(--app-color-text-soft);
+	--button-secondary-foreground-hover: var(--app-color-white);
+	--button-social-background-default: var(--app-color-surface-soft);
+	--button-social-background-hover: var(--app-color-surface-soft-hover);
+	--button-social-border-default: var(--app-color-border);
+	--button-social-foreground-default: var(--app-color-text-soft);
+	--button-social-foreground-hover: var(--app-color-white);
+
+	--form-background-default: transparent;
+	--form-border-default: var(--app-color-border);
+	--input-background-default: var(--app-color-input-surface);
+	--input-background-hover: var(--app-color-input-surface-hover);
+	--input-border-default: var(--app-color-border);
+	--input-border-focus: var(--app-color-focus);
+	--input-border-hover: var(--app-color-border-strong);
+	--input-foreground-primary: var(--app-color-text);
+	--input-foreground-secondary: var(--app-color-text-secondary);
+	--input-foreground-tertiary: var(--app-color-text-muted);
+
+	/* @ory/elements-react@1.2.1 运行时 CSS 使用 --radius-*。 */
+	--radius-buttons: 0.75rem;
+	--radius-forms: 0.75rem;
+	--radius-general: 0.75rem;
+	--radius-branding: 0.75rem;
+	--radius-cards: 1.2rem;
+}

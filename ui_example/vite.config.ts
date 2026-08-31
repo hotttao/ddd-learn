@@ -15,6 +15,19 @@ export default defineConfig({
   worker: {
     format: "es",
   },
+  server: {
+    // Listen on the host LAN address so other devices can open the UI.
+    host: "192.168.2.41",
+    port: 5173,
+    // Browser requests use the same-origin /kratos path. Vite forwards them
+    // to the Traefik entry point; Traefik then routes them to Kratos.
+    proxy: {
+      "/kratos": {
+        target: "http://192.168.2.41:8080",
+        changeOrigin: false,
+      },
+    },
+  },
   build: {
     sourcemap: analyze,
     chunkSizeWarningLimit: 1024,

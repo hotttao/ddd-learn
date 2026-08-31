@@ -2,7 +2,12 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
+import { OrySessionProvider } from "./foundation/providers/ory-session";
+import "./styles/tokens.css";
 import "./index.css";
+import "@ory/elements-react/theme/styles.css";
+import "./styles/ory-theme.css";
+import "./pages/auth/auth.css";
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {
@@ -12,7 +17,9 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <BrowserRouter>
-      <App />
+      <OrySessionProvider>
+        <App />
+      </OrySessionProvider>
     </BrowserRouter>
   </React.StrictMode>,
 );

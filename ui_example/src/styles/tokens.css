@@ -1,0 +1,22 @@
+:root {
+	--app-color-primary: #596bf4;
+	--app-color-primary-deep: #4564d7;
+	--app-color-primary-hover: #6d7df8;
+	--app-color-surface: rgba(15, 23, 42, 0.88);
+	--app-color-surface-soft: rgba(255, 255, 255, 0.06);
+	--app-color-surface-soft-hover: rgba(255, 255, 255, 0.1);
+	--app-color-input-surface: rgba(255, 255, 255, 0.065);
+	--app-color-input-surface-hover: rgba(255, 255, 255, 0.11);
+	--app-color-border: rgba(148, 163, 184, 0.3);
+	--app-color-border-strong: rgba(174, 187, 224, 0.7);
+	--app-color-text: #f8fafc;
+	--app-color-text-secondary: #c9d3e7;
+	--app-color-text-soft: #dbe4ff;
+	--app-color-text-secondary-strong: #aeb9d2;
+	--app-color-text-muted: #8e9ab4;
+	--app-color-link: #9aa7ff;
+	--app-color-link-hover: #c4cbff;
+	--app-color-focus: #7180f6;
+	--app-color-white: #ffffff;
+	--app-font-sans: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+}

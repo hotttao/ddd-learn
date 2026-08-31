@@ -33,9 +33,21 @@ services:
     volumes:
       - ./kratos:/etc/config/kratos:ro
     ports:
-      - "4433:4433"
+      - "192.168.2.41:4433:4433"
       # 为后续管理页面预留 Kratos Admin API；生产环境必须增加访问控制。
-      - "4434:4434"
+      - "192.168.2.41:4434:4434"
+
+  traefik:
+    image: traefik:v3.1
+    command: --configFile=/etc/traefik/traefik.yml
+    depends_on:
+      kratos:
+        condition: service_started
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    ports:
+      - "192.168.2.41:8080:80"
 
 volumes:
   auth-001-postgres:
