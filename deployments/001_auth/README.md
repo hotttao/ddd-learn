@@ -1,7 +1,8 @@
 # 001_auth：基础认证
 
 本目录是基础认证模块的独立部署目录，目标是使用 Ory Kratos 和 Ory Elements
-实现用户注册、登录、注销、Session 查询、密码恢复和密码修改。
+实现用户注册、登录、注销、Session 查询、密码恢复和密码修改。密码恢复和邮箱
+验证需要 SMTP；教学环境将在后续步骤加入 Mailpit 作为邮件接收器。
 
 ## 本模块的边界
 
@@ -23,6 +24,8 @@ Kratos ──> PostgreSQL
 - Hydra；
 - Keto、OpenFGA 和 OPA；
 - 业务服务。
+
+Mailpit 只是本地邮件投递依赖，不承担认证、鉴权或业务职责。
 
 前端直接调用 Kratos Public API。Kratos Admin API 只供可信的运维或后端操作，
 不能暴露给浏览器。

@@ -1,0 +1,138 @@
+# Kratos 配置文件格式版本，不是 Kratos 程序版本。
+version: v0.13.0
+
+# Kratos 使用的持久化数据库连接；数据库由后续 docker-compose.yml 创建。
+dsn: postgres://ory:ory@postgres:5432/ory?sslmode=disable
+
+serve:
+  public:
+    # Public API 监听地址；浏览器和 Ory Elements 只能访问这一组 API。
+    host: 0.0.0.0
+    # Public API 监听端口。
+    port: 4433
+    # Kratos 生成链接、Cookie 和 Flow 回调时使用的公开地址。
+    base_url: http://localhost:4433/
+    cors:
+      # 允许跨域请求 Public API。
+      enabled: true
+      # 只允许 Account UI 的开发环境地址访问 Public API。
+      allowed_origins:
+        - http://localhost:3011
+        - http://127.0.0.1:3011
+  admin:
+    # Admin API 监听地址；后续部署不会把 4434 映射到宿主机。
+    host: 0.0.0.0
+    # Admin API 监听端口。
+    port: 4434
+    # 容器内部可信服务访问 Admin API 时使用的地址，浏览器不可直接访问。
+    base_url: http://kratos:4434/
+
+selfservice:
+  # 未指定 return_to 时，Flow 完成后默认跳转到 Account UI 首页。
+  default_browser_return_url: http://localhost:3011/
+  # 允许 Flow 跳转的地址白名单，防止利用 return_to 进行开放重定向。
+  allowed_return_urls:
+    - http://localhost:3011/
+    - http://127.0.0.1:3011/
+
+  methods:
+    password:
+      # 启用邮箱 + 密码登录和注册。
+      enabled: true
+    code:
+      # 启用一次性验证码，用于邮箱验证和密码恢复。
+      enabled: true
+
+  flows:
+    error:
+      # Flow 发生错误时展示的 Account UI 页面。
+      ui_url: http://localhost:3011/error
+
+    login:
+      # 登录 Flow 的 Account UI 页面。
+      ui_url: http://localhost:3011/login
+      # 登录 Flow 的有效期。
+      lifespan: 10m
+
+    registration:
+      # 注册 Flow 的 Account UI 页面。
+      ui_url: http://localhost:3011/registration
+      # 注册 Flow 的有效期。
+      lifespan: 10m
+      after:
+        password:
+          hooks:
+            # 密码注册成功后自动创建 Kratos Session。
+            - hook: session
+
+    logout:
+      after:
+        # 注销成功后跳转回登录页面。
+        default_browser_return_url: http://localhost:3011/login
+
+    recovery:
+      # 开启密码恢复 Flow。
+      enabled: true
+      # 密码恢复页面地址。
+      ui_url: http://localhost:3011/recovery
+      # 使用一次性验证码完成密码恢复。
+      use: code
+
+    settings:
+      # 已登录用户修改密码和个人资料的页面地址。
+      ui_url: http://localhost:3011/settings
+      # 高权限操作允许复用当前 Session 的最长时间。
+      privileged_session_max_age: 15m
+
+    verification:
+      # 开启邮箱验证 Flow。
+      enabled: true
+      # 邮箱验证页面地址。
+      ui_url: http://localhost:3011/verification
+      # 使用一次性验证码完成邮箱验证。
+      use: code
+
+identity:
+  # 新建 Identity 默认使用的 Schema ID。
+  default_schema_id: default
+  schemas:
+    # 注册资料和用户 Traits 的 Schema 配置。
+    - id: default
+      # file:// 路径指向挂载到容器内的 Schema 文件。
+      url: file:///etc/config/kratos/identity.schema.json
+
+session:
+  # 登录 Session 的有效期。
+  lifespan: 24h
+
+secrets:
+  cookie:
+    # 用于签名和保护浏览器 Session Cookie；生产环境必须替换并保密。
+    - PLEASE-CHANGE-ME-auth-cookie-secret
+  cipher:
+    # 用于加密需要保护的 Kratos 数据；生产环境必须替换并保密。
+    - 32-LONG-SECRET-NOT-SECURE-AT-ALL
+
+ciphers:
+  # Kratos 使用的对称加密算法。
+  algorithm: xchacha20-poly1305
+
+hashers:
+  # 用户密码只保存哈希，不保存明文。
+  algorithm: bcrypt
+  bcrypt:
+    # bcrypt 工作因子；数值越高越安全，但计算成本也越高。
+    cost: 8
+
+courier:
+  smtp:
+    # Kratos 发送验证和恢复邮件使用的 SMTP 地址；后续接入本地 Mailpit。
+    connection_uri: smtps://test:test@mailpit:1025/?skip_ssl_verify=true
+
+log:
+  # 开发环境使用 debug 级别日志，便于观察 Flow。
+  level: debug
+  # 使用易读的文本日志格式。
+  format: text
+  # 开发环境允许输出敏感调试信息；生产环境必须关闭。
+  leak_sensitive_values: true
