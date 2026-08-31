@@ -125,8 +125,11 @@ hashers:
 
 courier:
   smtp:
-    # Kratos 发送验证和恢复邮件使用的 SMTP 地址；后续接入本地 Mailpit。
-    connection_uri: smtps://test:test@mailpit:1025/?skip_ssl_verify=true
+    # Kratos Courier 发送验证和恢复邮件使用的 SMTP 地址。
+    # smtp 表示普通 SMTP；Mailpit 默认不要求用户名和密码。
+    # mailpit:1025 通过 Docker Compose 内部 DNS 访问 Mailpit SMTP 服务。
+    # disable_starttls=true 仅用于本地教学环境；生产环境必须使用受保护的 SMTP 连接。
+    connection_uri: smtp://mailpit:1025/?disable_starttls=true
 
 log:
   # 开发环境使用 debug 级别日志，便于观察 Flow。

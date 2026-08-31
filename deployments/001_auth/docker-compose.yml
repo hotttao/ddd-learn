@@ -37,6 +37,28 @@ services:
       # 为后续管理页面预留 Kratos Admin API；生产环境必须增加访问控制。
       - "192.168.2.41:4434:4434"
 
+  kratos-courier:
+    # Courier 与 Kratos API 使用同一个镜像，只是启动不同的子命令。
+    image: ghcr.io/hotttao/ory-kratos:v26.2.0
+    # 独立轮询 PostgreSQL 中的 courier_messages，并投递到配置的 SMTP 服务。
+    command: courier watch -c /etc/config/kratos/kratos.yml
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    volumes:
+      - ./kratos:/etc/config/kratos:ro
+
+  mailpit:
+    # Mailpit 只用于教学环境接收邮件，不参与生产认证链路。
+    image: m.daocloud.io/docker.io/axllent/mailpit:v1.27.8
+    ports:
+      # SMTP 端口暴露到局域网，便于调试邮件投递。
+      - "192.168.2.41:1025:1025"
+      # Mailpit Web UI，可在浏览器中查看收到的邮件。
+      - "192.168.2.41:8025:8025"
+
   traefik:
     image: traefik:v3.1
     command: --configFile=/etc/traefik/traefik.yml
