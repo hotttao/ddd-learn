@@ -27,8 +27,9 @@ Kratos ──> PostgreSQL
 
 Mailpit 只是本地邮件投递依赖，不承担认证、鉴权或业务职责。
 
-前端直接调用 Kratos Public API。Kratos Admin API 只供可信的运维或后端操作，
-不能暴露给浏览器。
+Account UI 直接调用 Kratos Public API。当前开发环境额外映射 Admin API `4434`，
+为后续管理页面预留访问入口。Kratos Admin API 没有内置的用户认证机制，不能直接
+暴露到公网；生产环境必须通过内网、网络策略或独立管理面鉴权进行保护。
 
 ## 目录约定
 

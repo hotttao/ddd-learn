@@ -1,0 +1,41 @@
+name: ddd-learn-auth-001
+
+services:
+  postgres:
+    image: m.daocloud.io/docker.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_USER: ory
+      POSTGRES_PASSWORD: ory
+      POSTGRES_DB: ory
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ory -d ory"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+    volumes:
+      - auth-001-postgres:/var/lib/postgresql/data
+
+  kratos-migrate:
+    image: ghcr.io/hotttao/ory-kratos:v26.2.0
+    command: migrate sql -e -y -c /etc/config/kratos/kratos.yml
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./kratos:/etc/config/kratos:ro
+
+  kratos:
+    image: ghcr.io/hotttao/ory-kratos:v26.2.0
+    command: serve -c /etc/config/kratos/kratos.yml --dev
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./kratos:/etc/config/kratos:ro
+    ports:
+      - "4433:4433"
+      # 为后续管理页面预留 Kratos Admin API；生产环境必须增加访问控制。
+      - "4434:4434"
+
+volumes:
+  auth-001-postgres:
