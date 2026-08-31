@@ -64,11 +64,11 @@ Kratos Public API :4433
 | Logout | 已完成 | 导航栏或首页按钮 |
 | Recovery Code | 已完成 | `/recovery` |
 | Recovery 授权的 Settings | 已完成 | `/settings?flow=...` |
-| 已登录用户主动进入 Settings | 下一步实现 | 暂无入口 |
+| 已登录用户主动进入 Settings | 已完成 | `/settings` |
 | Verification | Kratos 已配置，Account UI 尚未实现 | 暂无可用页面 |
 | Error UI | Kratos 已配置，Account UI 尚未实现专用页面 | 暂无专用页面 |
 
-下面只把已经完成的 Workflow 记为可执行流程。尚未实现的 Verification 和已登录 Settings 不提前写成“已经可用”。
+下面只把已经完成的 Workflow 记为可执行流程。尚未实现的 Verification 不提前写成“已经可用”。
 
 ### Registration：邮箱和密码注册
 
@@ -236,6 +236,27 @@ selfservice:
 Ory Elements 读取这个 `continue_with` 并执行浏览器跳转。如果没有配置 `settings.after.password.default_browser_return_url`，Kratos 默认可能把当前 Settings UI 作为返回地址，于是保存成功后又回到 `/settings?flow=...`。只在 React 的 `onSuccess` 中调用 `window.location.replace("/")` 也不可靠，因为 Ory Elements 随后仍会处理 Kratos 返回的 `continue_with`，服务端跳转可能覆盖前端跳转。
 
 如果第 3 步返回字段错误，页面继续渲染更新后的 Settings Flow；只有成功响应才跳回首页。Flow 过期后不能重复使用，必须重新从 `/recovery` 开始。
+
+### Authenticated Settings：已登录用户主动修改密码
+
+Recovery 和已登录 Settings 最终使用同一种 Settings Flow 数据结构，区别在于授权来源：Recovery 通过邮箱验证码建立恢复授权；主动修改密码使用现有 Session，并受 `privileged_session_max_age: 15m` 约束。
+
+已登录用户点击导航栏的 **Account settings**，首先进入：
+
+```text
+http://192.168.2.41:5173/settings
+```
+
+| 步骤 | 地址栏 | 浏览器 Network 请求 | 关键结果 |
+| --- | --- | --- | --- |
+| 1 | `/settings` | `GET http://192.168.2.41:5173/kratos/self-service/settings/browser` | 携带 Session Cookie 创建 Settings Flow |
+| 2 | 即将变化 | 响应 `303 Location: http://192.168.2.41:5173/settings?flow=<settings-flow-id>` | 浏览器进入 Settings UI |
+| 3 | `/settings?flow=<id>` | `GET http://192.168.2.41:5173/kratos/self-service/settings/flows?id=<id>` | 返回 profile、password 等已启用方法的 UI Nodes |
+| 4 | 不变 | `POST http://192.168.2.41:5173/kratos/self-service/settings?flow=<id>` | 修改密码时提交 `csrf_token`、`method=password` 和新密码 |
+| 5 | 即将变化 | 成功响应返回 `continue_with.redirect_browser_to` | Ory Elements 按 Kratos 配置跳转首页 |
+| 6 | `/` | `GET http://192.168.2.41:5173/kratos/sessions/whoami` | 首页读取更新后的 Session 和 Identity |
+
+如果没有有效 Session，步骤 1 不会创建可用的 Settings Flow，而是要求用户登录。若 Session 存在但最近认证时间超过 15 分钟，敏感提交可能返回 `403 session_refresh_required`；响应中的 `redirect_browser_to` 会启动带 `refresh=true` 的 Login Flow，用户重新证明身份后再返回 Settings。这里的“重新登录”用于提升当前 Session 的新鲜度，不是创建另一个 Identity。
 
 ### 在 Network 面板中如何识别一次 Flow
 
