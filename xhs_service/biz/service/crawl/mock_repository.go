@@ -25,6 +25,10 @@ func NewMockRepository() *MockRepository {
 				{ID: "note-001", Title: "Ory Kratos browser login flow", SourceKeyword: "Ory"},
 				{ID: "note-002", Title: "Hertz internal JWT middleware", SourceKeyword: "Hertz"},
 			},
+			"G": {
+				{ID: "note-001", Title: "Ory Kratos browser login flow", SourceKeyword: "Ory"},
+				{ID: "note-002", Title: "Hertz internal JWT middleware", SourceKeyword: "Hertz"},
+			},
 		},
 	}
 }

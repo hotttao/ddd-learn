@@ -71,6 +71,16 @@ func TestMockRepositoryProvidesDemoContents(t *testing.T) {
 	}
 }
 
+func TestMockRepositoryProvidesOrganizationGContents(t *testing.T) {
+	contents, err := NewMockRepository().ListContents(context.Background(), "G")
+	if err != nil {
+		t.Fatalf("ListContents() error = %v", err)
+	}
+	if len(contents) != 2 || contents[1].SourceKeyword != "Hertz" {
+		t.Fatalf("ListContents() = %#v, want fixed organization G contents", contents)
+	}
+}
+
 func TestNormalizeKeywords(t *testing.T) {
 	got, err := domain.NormalizeKeywords([]string{" a ", "a", "b"})
 	if err != nil || len(got) != 2 || got[0] != "a" || got[1] != "b" {

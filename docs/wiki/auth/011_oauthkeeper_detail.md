@@ -52,7 +52,7 @@ credential
 浏览器请求业务接口：
 
 ```http
-GET /v1/organizations/G/crawl/contents
+GET /v1/xhs/organizations/G/crawl/contents
 Cookie: ory_kratos_session=...
 ```
 
@@ -125,7 +125,7 @@ authorizer:
 例如：
 
 ```text
-PUT /v1/organizations/G/crawl/keywords
+PUT /v1/xhs/organizations/G/crawl/keywords
 Subject = Alice
 ```
 
@@ -394,7 +394,7 @@ Gateway 只负责自己的路由、TLS、限流和负载均衡。更换 Traefik�
 以浏览器查看抓取内容为例：
 
 ```text
-GET /v1/organizations/G/crawl/contents
+GET /v1/xhs/organizations/G/crawl/contents
 Cookie: ory_kratos_session=...
         │
         ▼
