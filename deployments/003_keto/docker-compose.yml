@@ -1,4 +1,4 @@
-name: ddd-learn-auth-002
+name: ddd-learn-auth-003-keto
 
 services:
   postgres:
@@ -13,8 +13,38 @@ services:
       timeout: 5s
       retries: 15
     volumes:
-      # 002 使用自己的 Kratos 数据，和 001_auth 的认证状态隔离。
-      - auth-002-postgres:/var/lib/postgresql/data
+      # 003 使用自己的 Kratos 数据，和 001、002 的认证状态隔离。
+      - auth-003-postgres:/var/lib/postgresql/data
+      # 第一次初始化时创建 Keto 数据库和独立数据库用户。
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+
+  keto-migrate:
+    # 创建 Keto 所需的数据库表和索引；这是一次性 Compose Job。
+    image: ghcr.io/hotttao/ory-keto:v26.2.0
+    # v26 使用 `migrate up`；旧版的 `migrate sql` 命令已移除。
+    command: migrate up -y -c /etc/config/keto/keto.yml
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # migration 需要读取与 Keto 服务相同的 DSN 配置。
+      - ./keto:/etc/config/keto:ro
+
+  keto:
+    # Keto Read API 和 Write API；本步骤只部署服务，不写入关系数据。
+    image: ghcr.io/hotttao/ory-keto:v26.2.0
+    command: serve -c /etc/config/keto/keto.yml
+    depends_on:
+      keto-migrate:
+        condition: service_completed_successfully
+    volumes:
+      # OPL 和 Keto 配置只读挂载，模型随部署版本管理。
+      - ./keto:/etc/config/keto:ro
+    ports:
+      # Read API：xhs_service 后续通过它检查权限。
+      - "192.168.2.41:4466:4466"
+      # Write API：后续初始化脚本写入 Relation Tuple；不供浏览器调用。
+      - "192.168.2.41:4467:4467"
 
   kratos-migrate:
     image: ghcr.io/hotttao/ory-kratos:v26.2.0
@@ -101,7 +131,7 @@ services:
       # 使用 Oathkeeper API 发布的公钥验证 Internal JWT。
       INTERNAL_JWT_ISSUER: http://oathkeeper:4456/
       INTERNAL_JWKS_URL: http://oathkeeper:4456/.well-known/jwks.json
-      # 第 003 模块才接入 Keto；当前接口使用 MockPermissionChecker。
+      # 第 4 步才接入 Keto；当前仍使用 MockPermissionChecker。
       KETO_ENABLED: "false"
     expose:
       - "8082"
@@ -128,5 +158,5 @@ services:
       - "192.168.2.41:8080:80"
 
 volumes:
-  # 002 使用自己的 Kratos/PostgreSQL 数据存储。
-  auth-002-postgres:
+  # 003 使用自己的 Kratos/PostgreSQL 数据存储。
+  auth-003-postgres:
