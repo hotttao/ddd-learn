@@ -1,0 +1,131 @@
+# 002_internal_jwt：Internal JWT
+
+本目录是 Internal JWT 模块的独立部署目录。它从
+`deployments/001_auth` 复制基础配置作为起点，之后独立维护 Kratos、Traefik、
+PostgreSQL、Courier、Mailpit、Oathkeeper、JWKS 和鉴权路由配置。
+
+复制配置表示继承上一步的部署基线，不表示两个 Compose 项目运行时共享容器或
+配置文件。后续本模块的修改只作用于本目录，`001_auth` 保持基础认证模块的状态。
+
+## 本模块的边界
+```text
+Browser / API Client
+        │ Kratos Session Cookie 或外部凭证
+        ▼
+Traefik :8080
+        │ ForwardAuth / Decision API
+        ▼
+Oathkeeper :4456
+        │ cookie_session -> allow -> id_token
+        │ Authorization: Bearer <short-lived internal JWT>
+        ▼
+xhs_service :8082
+        │ GET http://oathkeeper:4456/.well-known/jwks.json
+        │ JWKS 公钥本地缓存 + claims 校验
+        ▼
+Mock response
+```
+
+各组件职责如下：
+
+| 组件 | 本模块职责 | 不负责的内容 |
+| --- | --- | --- |
+| Kratos | 验证用户 Session，提供 `identity.id` | 签发 Internal JWT、业务权限判断 |
+| Oathkeeper | 匹配 Access Rule，认证外部凭证，签发 Internal JWT | 业务数据、真实抓取、业务数据库 |
+| Traefik | 接收业务请求，调用 Oathkeeper Decision API，并转发允许的请求 | 解析或自行伪造用户身份 |
+| `xhs_service` | 验证 Internal JWT，提供三个业务接口 | 真实抓取实现 |
+| JWKS | 提供签名和验签所需的密钥材料 | 用户和 Session 存储 |
+
+本模块采用 Oathkeeper Decision API 模式。两个端口的实际过程如下：
+
+### 4455：Reverse Proxy
+
+```text
+Client
+  │ 业务请求 + Cookie
+  ▼
+Oathkeeper :4455
+  │ 验证 Session、签发 Internal JWT
+  │ 直接代理业务请求
+  ▼
+xhs_service :8082
+```
+
+### 4456：Decision API（本模块采用）
+
+```text
+Client
+  │ 业务请求 + Cookie
+  ▼
+Traefik :8080
+  │ GET /decisions
+  ▼
+Oathkeeper :4456
+  │ 验证 Session、签发 Internal JWT
+  │ 返回 200 + Authorization: Bearer <JWT>
+  ▼
+Traefik -> xhs_service :8082
+          原始业务请求 + Internal JWT
+```
+
+`xhs_service` 通过 Oathkeeper API 获取验签公钥：
+
+```text
+GET http://oathkeeper:4456/.well-known/jwks.json
+```
+
+4455 是 Oathkeeper 直接代理业务的入口；4456 是只返回鉴权决策的 API 入口。
+本模块使用 4456，4455 不参与业务调用链。
+
+## 业务接口契约
+
+接口先验证 `Authorization: Bearer <Internal JWT>`，通过后返回 Mock 数据。
+真实抓取、关键词持久化和内容数据库不在本模块实现范围内。
+
+| 方法 | 路径 | 用途 | Mock 结果 |
+| --- | --- | --- | --- |
+| `POST` | `/v1/organizations/:organization_id/crawl/tasks` | 启动抓取任务 | 返回固定任务 ID 和 `pending` 状态 |
+| `GET` | `/v1/organizations/:organization_id/crawl/contents` | 查看抓取内容 | 返回固定内容列表 |
+| `PUT` | `/v1/organizations/:organization_id/crawl/keywords` | 修改抓取关键词 | 返回请求中的关键词或固定关键词列表 |
+
+## 信任边界
+
+```text
+客户端提供的 Cookie / Authorization
+        ↓ 仅交给 Oathkeeper 验证
+Oathkeeper 验证后的 Subject
+        ↓ 使用私钥签发 Internal JWT
+Traefik 转发 Internal JWT
+        ↓ 使用公钥验证签名和标准 claims
+xhs_service 使用可信 Subject 执行业务接口
+```
+
+客户端提交的 `X-User-ID`、`X-Subject`、`X-Role` 等身份 Header 不可信，
+不能直接作为业务身份。`xhs_service` 必须验证 JWT 的签名、`iss`、`aud`、
+`exp` 和 `sub`，不能因为请求经过 Traefik 就自动信任。
+
+## 配置目录约定
+
+```text
+deployments/
+├── 001_auth/
+│   ├── docker-compose.yml       # 002 的复制来源
+│   ├── kratos/
+│   └── traefik/
+└── 002_internal_jwt/            # 从 001 复制后独立演进
+    ├── README.md
+    ├── docker-compose.yml
+    ├── kratos/
+    └── traefik/
+    # 后续步骤新增以下目录
+    ├── oathkeeper/
+    │   ├── config.yaml
+    │   └── rules.yaml
+    └── jwks/
+        ├── private.json
+        └── public.json
+```
+
+私钥 JWKS 只挂载给 Oathkeeper，业务服务只需要公钥 JWKS 或其 URL。开发环境
+可以使用本地测试密钥；生产环境必须通过 Secret、Vault 或其他密钥管理系统
+提供，不能把私钥提交到代码仓库。
