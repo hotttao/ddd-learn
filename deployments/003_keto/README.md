@@ -8,18 +8,18 @@ Traefik、PostgreSQL、Courier、Mailpit、Oathkeeper、JWKS 和 Keto。
 使用不同的数据库用户，不读取或修改 001、002 的运行数据。复制配置表示继承
 上一步的部署基线，不表示两个 Compose 项目运行时共享容器或配置文件。
 
-## 本步骤范围
+## 当前范围
 
-本步骤只完成 Keto 服务、Keto 数据库和数据库迁移。Alice、Bob 的 Relation Tuple
-在第 3 步写入，`xhs_service` 在第 4 步切换到真实 Keto 校验。
-
-当前 xhs_service 仍保持：
+Keto 服务、数据库、迁移和 Alice/Bob Relation Tuple 已完成。第 4 步把
+`xhs_service` 切换到真实 Keto 校验：
 
 ```yaml
-KETO_ENABLED: "false"
+KETO_ENABLED: "true"
+KETO_READ_URL: http://keto:4466
 ```
 
-因此本步骤启动后，业务接口仍使用 MockPermissionChecker。
+`xhs_service` 不再使用 MockPermissionChecker。Keto 不可用或返回异常时采用
+fail-closed：业务接口返回 `503`，不会绕过权限检查。
 
 ## 服务拓扑
 
@@ -34,7 +34,7 @@ Oathkeeper host :4456 / container :4456
   │ Internal JWT
   ▼
 xhs_service :8082
-  │ 第 4 步起调用 Keto Read API
+  │ 调用 Keto Read API 检查业务 Permission
   ▼
 Keto host :4466 / container :4466
 ```
@@ -46,7 +46,7 @@ Keto host :4466 / container :4466
 | Kratos | 验证用户 Session，提供 `identity.id` | 签发 Internal JWT、业务权限判断 |
 | Oathkeeper | 认证外部凭证，签发 Internal JWT | 业务权限和业务数据 |
 | Traefik | 接收请求并调用 Oathkeeper Decision API | 业务权限判断 |
-| `xhs_service` | 验证 Internal JWT，后续调用 Keto 判断业务权限 | 真实抓取实现 |
+| `xhs_service` | 验证 Internal JWT，调用 Keto 判断业务权限 | 真实抓取实现 |
 | Keto | 根据 OPL 计算业务权限 | 用户登录和 JWT 签发 |
 | PostgreSQL `ory` 数据库 | 保存 Kratos Identity 和 Session | Keto Relation Tuple |
 | PostgreSQL `keto` 数据库 | 保存 Keto Relation Tuple 和内部数据 | Kratos Identity 和 Session |

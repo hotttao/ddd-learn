@@ -12,6 +12,7 @@ import (
 	crawlhandler "media_agent/xhs_service/biz/handler/crawl"
 	crawlservice "media_agent/xhs_service/biz/service/crawl"
 	"media_agent/xhs_service/biz/shared"
+	ketoclient "media_agent/xhs_service/biz/shared/client/keto"
 )
 
 func main() {
@@ -42,8 +43,12 @@ func main() {
 	}
 	defer shutdownObs(context.Background())
 
+	ketoClient, err := ketoclient.New(cfg.GetKeto())
+	if err != nil {
+		log.Fatalf("init Keto client: %v", err)
+	}
 	crawlhandler.SetService(crawlservice.New(
-		crawlservice.NewMockRepository(), crawlservice.MockPermissionChecker{}, shared.NewID, time.Now,
+		crawlservice.NewMockRepository(), ketoClient, shared.NewID, time.Now,
 	))
 
 	h, err := suite.NewServer(context.Background())

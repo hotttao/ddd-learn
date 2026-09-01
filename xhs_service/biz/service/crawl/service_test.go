@@ -39,6 +39,20 @@ func TestServiceAuthorizationAndMockPersistence(t *testing.T) {
 	if len(keywords) != 0 {
 		t.Fatalf("GetKeywords() = %v, want unchanged mock data", keywords)
 	}
+
+	wantChecks := []permissionCheck{
+		{subject: "User:identity:alice", namespace: "Organization", object: "G", relation: PermissionStartCrawl},
+		{subject: "User:identity:bob", namespace: "Organization", object: "G", relation: PermissionModifyKeywords},
+		{subject: "User:identity:alice", namespace: "Organization", object: "G", relation: PermissionViewContent},
+	}
+	if len(checker.checks) != len(wantChecks) {
+		t.Fatalf("permission checks = %#v, want %#v", checker.checks, wantChecks)
+	}
+	for i := range wantChecks {
+		if checker.checks[i] != wantChecks[i] {
+			t.Fatalf("permission check %d = %#v, want %#v", i, checker.checks[i], wantChecks[i])
+		}
+	}
 }
 
 func TestServiceFailsClosedWhenKetoUnavailable(t *testing.T) {
@@ -47,17 +61,6 @@ func TestServiceFailsClosedWhenKetoUnavailable(t *testing.T) {
 		Subject: "identity:alice", OrganizationID: "G", Keywords: []string{"技术"},
 	}); !errors.Is(err, ErrDependencyUnavailable) {
 		t.Fatalf("StartTask() error = %v, want ErrDependencyUnavailable", err)
-	}
-}
-
-func TestMockPermissionCheckerDeniesReservedOrganization(t *testing.T) {
-	checker := MockPermissionChecker{}
-	allowed, err := checker.Check(context.Background(), "identity:alice", "Organization", "forbidden", "view_crawl_content")
-	if err != nil {
-		t.Fatalf("Check() error = %v", err)
-	}
-	if allowed {
-		t.Fatal("Check() allowed reserved organization, want denied")
 	}
 }
 
@@ -91,8 +94,17 @@ func TestNormalizeKeywords(t *testing.T) {
 type fakeChecker struct {
 	allowed bool
 	err     error
+	checks  []permissionCheck
 }
 
-func (f *fakeChecker) Check(context.Context, string, string, string, string) (bool, error) {
+type permissionCheck struct {
+	subject   string
+	namespace string
+	object    string
+	relation  string
+}
+
+func (f *fakeChecker) Check(_ context.Context, subject, namespace, object, relation string) (bool, error) {
+	f.checks = append(f.checks, permissionCheck{subject: subject, namespace: namespace, object: object, relation: relation})
 	return f.allowed, f.err
 }

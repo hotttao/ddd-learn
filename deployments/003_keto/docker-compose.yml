@@ -146,14 +146,17 @@ services:
     depends_on:
       oathkeeper:
         condition: service_started
+      keto:
+        condition: service_started
     environment:
       # 服务监听 Compose 网络内部地址，不直接暴露宿主机端口。
       SERVER_ADDR: ":8082"
       # 使用 Oathkeeper API 发布的公钥验证 Internal JWT。
       INTERNAL_JWT_ISSUER: http://oathkeeper:4456/
       INTERNAL_JWKS_URL: http://oathkeeper:4456/.well-known/jwks.json
-      # 第 4 步才接入 Keto；当前仍使用 MockPermissionChecker。
-      KETO_ENABLED: "false"
+      # 业务服务只调用 Read API；Keto 不可用时权限校验失败并返回 503。
+      KETO_ENABLED: "true"
+      KETO_READ_URL: http://keto:4466
     expose:
       - "8082"
 

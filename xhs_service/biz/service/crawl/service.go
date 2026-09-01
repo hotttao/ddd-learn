@@ -15,6 +15,15 @@ var (
 	ErrDependencyUnavailable = errors.New("authorization dependency unavailable")
 )
 
+const (
+	organizationNamespace = "Organization"
+	userNamespace         = "User"
+
+	PermissionStartCrawl     = "start_crawl"
+	PermissionViewContent    = "view_content"
+	PermissionModifyKeywords = "modify_keywords"
+)
+
 type PermissionChecker interface {
 	Check(ctx context.Context, subject, namespace, object, relation string) (bool, error)
 }
@@ -39,7 +48,7 @@ func (s *Service) StartTask(ctx context.Context, command StartTaskCommand) (doma
 	if err != nil {
 		return domain.Task{}, err
 	}
-	if err := s.authorize(ctx, command.Subject, organizationID, "start_crawl_task"); err != nil {
+	if err := s.authorize(ctx, command.Subject, organizationID, PermissionStartCrawl); err != nil {
 		return domain.Task{}, err
 	}
 	task := domain.Task{ID: s.newID(), OrganizationID: organizationID, Keywords: keywords, Status: "pending", CreatedAt: s.now().UTC()}
@@ -54,7 +63,7 @@ func (s *Service) ListContents(ctx context.Context, query OrganizationQuery) ([]
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authorize(ctx, query.Subject, organizationID, "view_crawl_content"); err != nil {
+	if err := s.authorize(ctx, query.Subject, organizationID, PermissionViewContent); err != nil {
 		return nil, err
 	}
 	return s.repository.ListContents(ctx, organizationID)
@@ -65,7 +74,7 @@ func (s *Service) GetKeywords(ctx context.Context, query OrganizationQuery) ([]s
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authorize(ctx, query.Subject, organizationID, "view_crawl_content"); err != nil {
+	if err := s.authorize(ctx, query.Subject, organizationID, PermissionViewContent); err != nil {
 		return nil, err
 	}
 	return s.repository.GetKeywords(ctx, organizationID)
@@ -80,7 +89,7 @@ func (s *Service) UpdateKeywords(ctx context.Context, command UpdateKeywordsComm
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authorize(ctx, command.Subject, organizationID, "update_keywords"); err != nil {
+	if err := s.authorize(ctx, command.Subject, organizationID, PermissionModifyKeywords); err != nil {
 		return nil, err
 	}
 	if err := s.repository.ReplaceKeywords(ctx, organizationID, keywords); err != nil {
@@ -93,7 +102,7 @@ func (s *Service) authorize(ctx context.Context, subject, object, relation strin
 	if subject == "" {
 		return ErrUnauthenticated
 	}
-	allowed, err := s.permissions.Check(ctx, subject, "Organization", object, relation)
+	allowed, err := s.permissions.Check(ctx, userNamespace+":"+subject, organizationNamespace, object, relation)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrDependencyUnavailable, err)
 	}

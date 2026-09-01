@@ -34,8 +34,8 @@ internal_jwt:
   protected_prefixes: ["/v1/xhs/"]
 
 keto:
-  # Keto is introduced in the next module; this module uses mock authorization.
-  enabled: ${KETO_ENABLED:-false}
+  # 业务接口使用 Keto Read API 校验组织权限；不可用时拒绝请求。
+  enabled: ${KETO_ENABLED:-true}
   read_url: ${KETO_READ_URL:-http://127.0.0.1:4466}
   request_timeout_ms: 2000
 
