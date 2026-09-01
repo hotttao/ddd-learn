@@ -1,0 +1,132 @@
+name: ddd-learn-auth-002
+
+services:
+  postgres:
+    image: m.daocloud.io/docker.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_USER: ory
+      POSTGRES_PASSWORD: ory
+      POSTGRES_DB: ory
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ory -d ory"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+    volumes:
+      # 002 使用自己的 Kratos 数据，和 001_auth 的认证状态隔离。
+      - auth-002-postgres:/var/lib/postgresql/data
+
+  kratos-migrate:
+    image: ghcr.io/hotttao/ory-kratos:v26.2.0
+    command: migrate sql -e -y -c /etc/config/kratos/kratos.yml
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./kratos:/etc/config/kratos:ro
+
+  kratos:
+    image: ghcr.io/hotttao/ory-kratos:v26.2.0
+    command: serve -c /etc/config/kratos/kratos.yml --dev
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./kratos:/etc/config/kratos:ro
+    ports:
+      - "192.168.2.41:4433:4433"
+      # 为后续管理页面预留 Kratos Admin API；生产环境必须增加访问控制。
+      - "192.168.2.41:4434:4434"
+
+  kratos-seed:
+    # 一次性初始化教学用户；脚本按邮箱幂等检查，重复启动不会重复创建。
+    image: ghcr.io/hotttao/ory-kratos:v26.2.0
+    # Kratos 镜像默认 entrypoint 是 kratos；seed 需要直接运行 shell 脚本。
+    entrypoint: ["/bin/sh"]
+    command: ["/etc/config/kratos/seed-identities.sh"]
+    depends_on:
+      kratos:
+        condition: service_started
+    environment:
+      # 仅用于本地教学；生产环境应从 Secret 注入，不把明文密码写入配置。
+      ALICE_EMAIL: alice@example.com
+      ALICE_PASSWORD: Alice-password-2026
+      BOB_EMAIL: bob@example.com
+      BOB_PASSWORD: Bob-password-2026
+    volumes:
+      - ./kratos:/etc/config/kratos:ro
+
+  kratos-courier:
+    # Courier 与 Kratos API 使用同一个镜像，只是启动不同的子命令。
+    image: ghcr.io/hotttao/ory-kratos:v26.2.0
+    # 独立轮询 PostgreSQL 中的 courier_messages，并投递到配置的 SMTP 服务。
+    command: courier watch -c /etc/config/kratos/kratos.yml
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    volumes:
+      - ./kratos:/etc/config/kratos:ro
+
+  oathkeeper:
+    # 使用 Oathkeeper v26.2.0，为后续 xhs_service 签发 Internal JWT。
+    image: ghcr.io/hotttao/ory-oathkeeper:v26.2.0
+    # Oathkeeper 会启动两个监听面；本模块只映射 4456，业务链路不使用 4455。
+    command: serve -c /etc/oathkeeper/config.yaml
+    depends_on:
+      kratos:
+        condition: service_started
+    volumes:
+      # Oathkeeper 读取本模块自己的配置和 Access Rules。
+      - ./oathkeeper/config.yaml:/etc/oathkeeper/config.yaml:ro
+      - ./oathkeeper/rules.yaml:/etc/oathkeeper/rules.yaml:ro
+      # 只有 Oathkeeper 能读取包含私钥的 JWKS 文件。
+      - ./jwks/id_token.jwks.json:/etc/oathkeeper/id_token.jwks.json:ro
+    ports:
+      # 教学环境绑定局域网，方便查看 JWKS；生产环境应只允许内部网络访问。
+      - "192.168.2.41:4456:4456"
+
+  xhs_service:
+    # xhs_service 只通过 Traefik 的 /v1/xhs 前缀对外提供接口。
+    build:
+      context: ../..
+      dockerfile: xhs_service/Dockerfile
+    depends_on:
+      oathkeeper:
+        condition: service_started
+    environment:
+      # 服务监听 Compose 网络内部地址，不直接暴露宿主机端口。
+      SERVER_ADDR: ":8082"
+      # 使用 Oathkeeper API 发布的公钥验证 Internal JWT。
+      INTERNAL_JWT_ISSUER: http://oathkeeper:4456/
+      INTERNAL_JWKS_URL: http://oathkeeper:4456/.well-known/jwks.json
+      # 第 003 模块才接入 Keto；当前接口使用 MockPermissionChecker。
+      KETO_ENABLED: "false"
+    expose:
+      - "8082"
+
+  mailpit:
+    # Mailpit 只用于教学环境接收邮件，不参与生产认证链路。
+    image: m.daocloud.io/docker.io/axllent/mailpit:v1.27.8
+    ports:
+      # SMTP 端口暴露到局域网，便于调试邮件投递。
+      - "192.168.2.41:1025:1025"
+      # Mailpit Web UI，可在浏览器中查看收到的邮件。
+      - "192.168.2.41:8025:8025"
+
+  traefik:
+    image: traefik:v3.1
+    command: --configFile=/etc/traefik/traefik.yml
+    depends_on:
+      kratos:
+        condition: service_started
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    ports:
+      - "192.168.2.41:8080:80"
+
+volumes:
+  # 002 使用自己的 Kratos/PostgreSQL 数据存储。
+  auth-002-postgres:
