@@ -122,10 +122,9 @@ deployments/
     │   ├── config.yaml
     │   └── rules.yaml
     └── jwks/
-        ├── private.json
-        └── public.json
+        └── id_token.jwks.json   # 开发环境私钥；公钥由 Oathkeeper 发布
 ```
 
-私钥 JWKS 只挂载给 Oathkeeper，业务服务只需要公钥 JWKS 或其 URL。开发环境
-可以使用本地测试密钥；生产环境必须通过 Secret、Vault 或其他密钥管理系统
-提供，不能把私钥提交到代码仓库。
+`id_token.jwks.json` 是开发环境私钥，只挂载给 Oathkeeper。业务服务只通过
+`/.well-known/jwks.json` 获取公钥。生产环境必须通过 Secret、Vault 或其他
+密钥管理系统提供私钥，不能把私钥提交到代码仓库。
