@@ -1,0 +1,26 @@
+# Decision API 模式下，Traefik 通过 X-Forwarded-* Header 传入原始请求信息。
+- id: internal-api-authentication
+  upstream:
+    # Decision API 不使用这个地址转发请求，但 Rule 仍需声明一个上游。
+    url: http://xhs_service:8082
+  match:
+    # 统一保护所有经过 API Router 的 /v1/ 接口。
+    url: http://192.168.2.41:8080/v1/<**>
+    methods:
+      - GET
+      - POST
+      - PUT
+      - PATCH
+      - DELETE
+
+  authenticators:
+    - # 通过 Kratos /sessions/whoami 验证 Session Cookie。
+      handler: cookie_session
+
+  authorizer:
+    # 只判断是否已认证；业务权限由各自的业务服务判断。
+    handler: allow
+
+  mutators:
+    - # 将可信 Subject 签发为 Authorization: Bearer <JWT>。
+      handler: id_token

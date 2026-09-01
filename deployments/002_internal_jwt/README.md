@@ -36,7 +36,8 @@ Mock response
 | `xhs_service` | 验证 Internal JWT，提供三个业务接口 | 真实抓取实现 |
 | JWKS | 提供签名和验签所需的密钥材料 | 用户和 Session 存储 |
 
-本模块采用 Oathkeeper Decision API 模式。两个端口的实际过程如下：
+本模块采用 Oathkeeper Decision API 模式。Traefik 将 API Router 下的
+`/v1/<**>` 请求统一交给 Oathkeeper；两个端口的实际过程如下：
 
 ### 4455：Reverse Proxy
 
@@ -76,6 +77,11 @@ GET http://oathkeeper:4456/.well-known/jwks.json
 
 4455 是 Oathkeeper 直接代理业务的入口；4456 是只返回鉴权决策的 API 入口。
 本模块使用 4456，4455 不参与业务调用链。
+
+Oathkeeper 的宽匹配 Rule 只负责确认 Session 有效并签发 Internal JWT。新增
+`/v1/` 下的业务接口通常不需要修改 `rules.yaml`；服务仍必须自行验证 JWT，
+并根据接口、用户、组织和资源关系判断是否允许执行。只有新增不同 API 前缀、
+不同 Host，或需要额外认证条件时，才需要增加 Oathkeeper Rule。
 
 ## 业务接口契约
 

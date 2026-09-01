@@ -50,6 +50,24 @@ services:
     volumes:
       - ./kratos:/etc/config/kratos:ro
 
+  oathkeeper:
+    # 使用 Oathkeeper v26.2.0，为后续 xhs_service 签发 Internal JWT。
+    image: ghcr.io/hotttao/ory-oathkeeper:v26.2.0
+    # Oathkeeper 会启动两个监听面；本模块只映射 4456，业务链路不使用 4455。
+    command: serve -c /etc/oathkeeper/config.yaml
+    depends_on:
+      kratos:
+        condition: service_started
+    volumes:
+      # Oathkeeper 读取本模块自己的配置和 Access Rules。
+      - ./oathkeeper/config.yaml:/etc/oathkeeper/config.yaml:ro
+      - ./oathkeeper/rules.yaml:/etc/oathkeeper/rules.yaml:ro
+      # 只有 Oathkeeper 能读取包含私钥的 JWKS 文件。
+      - ./jwks/id_token.jwks.json:/etc/oathkeeper/id_token.jwks.json:ro
+    ports:
+      # 教学环境绑定局域网，方便查看 JWKS；生产环境应只允许内部网络访问。
+      - "192.168.2.41:4456:4456"
+
   mailpit:
     # Mailpit 只用于教学环境接收邮件，不参与生产认证链路。
     image: m.daocloud.io/docker.io/axllent/mailpit:v1.27.8
