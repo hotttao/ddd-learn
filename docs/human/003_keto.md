@@ -37,10 +37,13 @@ Bob：普通成员
 | Organization Namespace | `Organization`，组织 G 的 object ID 为 `G` |
 | 管理员关系 | `Organization#admins@User:<identity-id>` |
 | 普通成员关系 | `Organization#members@User:<identity-id>` |
+| 组织权限上限 | `entitled_start_crawl`、`entitled_view_content`、`entitled_modify_keywords` |
+| 角色权限授权 | `granted_start_crawl`、`granted_view_content`、`granted_modify_keywords` |
 | 启动抓取权限 | `start_crawl`，管理员和普通成员都拥有 |
 | 查看抓取内容权限 | `view_content`，管理员和普通成员都拥有 |
 | 修改抓取关键词权限 | `modify_keywords`，仅管理员拥有 |
 
-Relation 表示用户与组织之间的事实关系，Permission 由 OPL 根据 Relation 计算得出。
+Relation 表示用户与组织之间的事实关系。Permission 由 OPL 计算，只有用户所属
+角色同时命中组织的 `entitled_*` 和角色的 `granted_*` 时才允许操作。
 UI 通过 `xhs_service` 获取当前用户的组织和角色，不直接访问 Keto；业务接口仍然
 必须独立检查对应 Permission。
