@@ -80,8 +80,20 @@ GET http://oathkeeper:4456/.well-known/jwks.json
 
 Oathkeeper 的宽匹配 Rule 只负责确认 Session 有效并签发 Internal JWT。新增
 `/v1/` 下的业务接口通常不需要修改 `rules.yaml`；服务仍必须自行验证 JWT，
-并根据接口、用户、组织和资源关系判断是否允许执行。只有新增不同 API 前缀、
-不同 Host，或需要额外认证条件时，才需要增加 Oathkeeper Rule。
+并根据接口、用户、组织和资源关系判断是否允许执行。每个业务服务应拥有自己
+稳定的 URL 前缀，例如 `xhs_service` 使用 `/v1/xhs`。只有新增不同 Host、
+不同 API 前缀，或需要额外认证条件时，才需要增加 Oathkeeper Rule。
+
+Traefik 的 Router 与前缀保持一一对应：
+
+```text
+/kratos/<**> -> kratos-public -> Kratos :4433
+               不经过 Oathkeeper
+
+/v1/xhs/<**> -> xhs-api -> oathkeeper-forward-auth
+             -> Oathkeeper :4456/decisions
+             -> xhs_service :8082
+```
 
 ## 业务接口契约
 
@@ -90,9 +102,9 @@ Oathkeeper 的宽匹配 Rule 只负责确认 Session 有效并签发 Internal JW
 
 | 方法 | 路径 | 用途 | Mock 结果 |
 | --- | --- | --- | --- |
-| `POST` | `/v1/organizations/:organization_id/crawl/tasks` | 启动抓取任务 | 返回固定任务 ID 和 `pending` 状态 |
-| `GET` | `/v1/organizations/:organization_id/crawl/contents` | 查看抓取内容 | 返回固定内容列表 |
-| `PUT` | `/v1/organizations/:organization_id/crawl/keywords` | 修改抓取关键词 | 返回请求中的关键词或固定关键词列表 |
+| `POST` | `/v1/xhs/organizations/:organization_id/crawl/tasks` | 启动抓取任务 | 返回固定任务 ID 和 `pending` 状态 |
+| `GET` | `/v1/xhs/organizations/:organization_id/crawl/contents` | 查看抓取内容 | 返回固定内容列表 |
+| `PUT` | `/v1/xhs/organizations/:organization_id/crawl/keywords` | 修改抓取关键词 | 返回请求中的关键词或固定关键词列表 |
 
 ## 信任边界
 

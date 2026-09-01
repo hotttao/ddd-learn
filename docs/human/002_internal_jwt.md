@@ -17,6 +17,6 @@ Mock 数据，不实现真实抓取。
 
 本模块使用的业务接口：
 
-- `POST /v1/organizations/:organization_id/crawl/tasks`：启动抓取任务；
-- `GET /v1/organizations/:organization_id/crawl/contents`：查看抓取内容；
-- `PUT /v1/organizations/:organization_id/crawl/keywords`：修改抓取关键词。
+- `POST /v1/xhs/organizations/:organization_id/crawl/tasks`：启动抓取任务；
+- `GET /v1/xhs/organizations/:organization_id/crawl/contents`：查看抓取内容；
+- `PUT /v1/xhs/organizations/:organization_id/crawl/keywords`：修改抓取关键词。

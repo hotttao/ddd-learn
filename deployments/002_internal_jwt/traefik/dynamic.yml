@@ -1,5 +1,5 @@
-# 当前网关只代理 Kratos Public API，不暴露 Kratos Admin API。
-# 这里仅配置网络路由；认证策略会在后续模块中交给 Oathkeeper 实现。
+# 当前网关代理 Kratos Public API 和业务 API，不暴露 Kratos Admin API。
+# /kratos 只负责认证基础设施请求；/v1 业务请求通过 Oathkeeper ForwardAuth。
 
 # http 是 Traefik 动态配置中的 HTTP 路由配置入口。
 http:
@@ -13,6 +13,18 @@ http:
         prefixes:
           # 浏览器访问 /kratos/self-service/... 时，Kratos 实际收到 /self-service/...。
           - /kratos
+
+    # oathkeeper-forward-auth 只用于业务 API Router，不用于 /kratos Router。
+    oathkeeper-forward-auth:
+      # ForwardAuth 先向 Oathkeeper 请求鉴权决策，再决定是否继续访问上游。
+      forwardAuth:
+        # Oathkeeper 的 4456 是 Decision API，不是直接代理业务的 4455。
+        address: http://oathkeeper:4456/decisions
+        # 不信任客户端自行提交的 X-Forwarded-* Header。
+        trustForwardHeader: false
+        # 仅把 Oathkeeper 生成的 Internal JWT 复制到业务请求。
+        authResponseHeaders:
+          - Authorization
 
   # routers 负责匹配进入 Traefik 的请求，并选择 Middleware 和后端 Service。
   routers:
@@ -31,6 +43,19 @@ http:
       # service 指定处理该请求的后端 Service，名称对应下方 services.kratos-public。
       service: kratos-public
 
+    # xhs-api 是 xhs_service 的业务 Router，与 Kratos Public API 使用不同的路径前缀。
+    xhs-api:
+      # 业务请求和 Kratos 请求都从同一个 web 入口进入，但由 rule 区分。
+      entryPoints:
+        - web
+      # 只匹配 xhs_service 的 /v1/xhs 前缀，不匹配 /kratos/ 或其他服务前缀。
+      rule: PathPrefix(`/v1/xhs`)
+      # 业务请求必须先通过 Oathkeeper Decision API。
+      middlewares:
+        - oathkeeper-forward-auth
+      # 允许后才转发到 xhs_service。
+      service: xhs-api
+
   # services 描述 Traefik 最终把请求转发到哪些后端实例。
   services:
     # kratos-public 是供上方 Router 引用的后端 Service 名称。
@@ -41,3 +66,10 @@ http:
         servers:
           # kratos 是 Docker Compose 服务名，可通过 Compose 内部 DNS 解析；4433 是 Public API 端口。
           - url: http://kratos:4433
+
+    # xhs-api 是业务服务的 Traefik 后端定义。
+    xhs-api:
+      loadBalancer:
+        # xhs_service 会在后续步骤加入本模块 Compose；当前只先固定路由边界。
+        servers:
+          - url: http://xhs_service:8082
