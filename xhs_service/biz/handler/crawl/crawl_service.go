@@ -19,11 +19,18 @@ import (
 func StartCrawlTask(ctx context.Context, c *app.RequestContext) {
 	var err error
 	var req crawl.StartCrawlTaskRequest
-	err = c.BindAndValidate(&req)
+	err = c.BindPath(&req)
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
+	var taskInput crawl.CrawlTaskInput
+	err = c.BindJSON(&taskInput)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	req.Task = &taskInput
 	if crawlService == nil {
 		c.String(consts.StatusInternalServerError, "crawl service is not configured")
 		return
@@ -101,19 +108,25 @@ func GetKeywords(ctx context.Context, c *app.RequestContext) {
 func UpdateKeywords(ctx context.Context, c *app.RequestContext) {
 	var err error
 	var req crawl.UpdateKeywordsRequest
-	err = c.BindAndValidate(&req)
+	err = c.BindPath(&req)
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
+	var keywordInput crawl.KeywordInput
+	err = c.BindJSON(&keywordInput)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	req.Keywords = &keywordInput
 
 	principal, ok := serverjwt.PrincipalFromContext(ctx)
 	if !ok {
 		writeServiceError(c, service.ErrUnauthenticated)
 		return
 	}
-	values := req.GetKeywords().GetValues()
-	keywords, err := crawlService.UpdateKeywords(ctx, service.UpdateKeywordsCommand{Subject: principal.Subject, OrganizationID: req.GetOrganizationId(), Keywords: values})
+	keywords, err := crawlService.UpdateKeywords(ctx, service.UpdateKeywordsCommand{Subject: principal.Subject, OrganizationID: req.GetOrganizationId(), Keywords: req.GetKeywords().GetValues()})
 	if err != nil {
 		writeServiceError(c, err)
 		return

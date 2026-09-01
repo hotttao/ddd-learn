@@ -6,6 +6,8 @@ import "context"
 // Resource authorization is introduced in the following Keto module.
 type MockPermissionChecker struct{}
 
-func (MockPermissionChecker) Check(context.Context, string, string, string, string) (bool, error) {
-	return true, nil
+// Check reserves organization "forbidden" as a deterministic denial case so
+// the HTTP authorization boundary can be verified before Keto is introduced.
+func (MockPermissionChecker) Check(_ context.Context, _, _, object, _ string) (bool, error) {
+	return object != "forbidden", nil
 }

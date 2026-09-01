@@ -3,27 +3,9 @@
 
 openapi: 3.0.3
 info:
-    title: ""
+    title: CrawlService API
     version: 0.0.1
 paths:
-    /health:
-        get:
-            tags:
-                - HealthService
-            operationId: HealthService_Health
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/HealthResponse'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
     /v1/xhs/organizations/{organization_id}/crawl/contents:
         get:
             tags:
@@ -33,10 +15,6 @@ paths:
                 - name: organization_id
                   in: path
                   required: true
-                  schema:
-                    type: string
-                - name: authorization
-                  in: query
                   schema:
                     type: string
             responses:
@@ -63,10 +41,6 @@ paths:
                   required: true
                   schema:
                     type: string
-                - name: authorization
-                  in: query
-                  schema:
-                    type: string
             responses:
                 "200":
                     description: OK
@@ -88,10 +62,6 @@ paths:
                 - name: organization_id
                   in: path
                   required: true
-                  schema:
-                    type: string
-                - name: authorization
-                  in: query
                   schema:
                     type: string
             requestBody:
@@ -122,10 +92,6 @@ paths:
                 - name: organization_id
                   in: path
                   required: true
-                  schema:
-                    type: string
-                - name: authorization
-                  in: query
                   schema:
                     type: string
             requestBody:
@@ -180,11 +146,6 @@ components:
                     description: The type of the serialized message.
             additionalProperties: true
             description: Contains an arbitrary serialized message along with a @type that describes the type of the serialized message.
-        HealthResponse:
-            type: object
-            properties:
-                status:
-                    type: string
         KeywordInput:
             type: object
             properties:
@@ -231,4 +192,3 @@ components:
                         type: string
 tags:
     - name: CrawlService
-    - name: HealthService

@@ -26,6 +26,15 @@ export default defineConfig({
         target: "http://192.168.2.41:8080",
         changeOrigin: false,
       },
+      // XHS keeps its public /v1/xhs prefix. Vite only forwards it to the
+      // shared gateway, where Oathkeeper exchanges the Kratos Session cookie
+      // for an internal JWT before proxying to xhs_service. changeOrigin is
+      // required because the Oathkeeper rule matches the gateway's :8080 URL,
+      // not Vite's browser-facing :5173 URL.
+      "/v1": {
+        target: "http://192.168.2.41:8080",
+        changeOrigin: true,
+      },
     },
   },
   build: {

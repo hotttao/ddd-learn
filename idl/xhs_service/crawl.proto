@@ -36,7 +36,7 @@ service CrawlService {
 }
 
 message StartCrawlTaskRequest {
-  string authorization = 1 [(api.header) = "Authorization"];
+  reserved 1;
   string organization_id = 2 [(api.path) = "organization_id"];
   CrawlTaskInput task = 3 [(api.body) = "task"];
 }
@@ -51,7 +51,7 @@ message StartCrawlTaskResponse {
 }
 
 message ListCrawlContentsRequest {
-  string authorization = 1 [(api.header) = "Authorization"];
+  reserved 1;
   string organization_id = 2 [(api.path) = "organization_id"];
 }
 
@@ -66,7 +66,7 @@ message CrawlContent {
 }
 
 message GetKeywordsRequest {
-  string authorization = 1 [(api.header) = "Authorization"];
+  reserved 1;
   string organization_id = 2 [(api.path) = "organization_id"];
 }
 
@@ -75,7 +75,7 @@ message GetKeywordsResponse {
 }
 
 message UpdateKeywordsRequest {
-  string authorization = 1 [(api.header) = "Authorization"];
+  reserved 1;
   string organization_id = 2 [(api.path) = "organization_id"];
   KeywordInput keywords = 3 [(api.body) = "keywords"];
 }

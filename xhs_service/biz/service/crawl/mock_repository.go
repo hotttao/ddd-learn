@@ -20,7 +20,12 @@ func NewMockRepository() *MockRepository {
 	return &MockRepository{
 		tasks:    make(map[string]domain.Task),
 		keywords: make(map[string][]string),
-		contents: make(map[string][]domain.Content),
+		contents: map[string][]domain.Content{
+			"demo": {
+				{ID: "note-001", Title: "Ory Kratos browser login flow", SourceKeyword: "Ory"},
+				{ID: "note-002", Title: "Hertz internal JWT middleware", SourceKeyword: "Hertz"},
+			},
+		},
 	}
 }
 

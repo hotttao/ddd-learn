@@ -1,1 +1,59 @@
-{}
+{
+	"brand": {
+		"name": "DDD Learn",
+		"subtitle": "Identity Lab"
+	},
+	"navigation": {
+		"currentSession": "Current session",
+		"xhsConsole": "XHS console",
+		"accountSettings": "Account settings",
+		"signingOut": "Signing out…",
+		"signOut": "Sign out",
+		"authentication": "Authentication",
+		"signIn": "Sign in",
+		"createAccount": "Create account"
+	},
+	"xhs": {
+		"eyebrow": "INTERNAL JWT LAB",
+		"title": "XHS service console",
+		"description": "Send real requests through Vite, Traefik and Oathkeeper to xhs_service. The browser only carries the Kratos Session cookie; Oathkeeper creates the internal JWT.",
+		"sessionActive": "Kratos session active",
+		"sessionChecking": "Checking current session…",
+		"authenticationRequired": "AUTHENTICATION REQUIRED",
+		"signInTitle": "Sign in before testing XHS.",
+		"signInDescription": "These routes require a Kratos browser Session so Oathkeeper can issue an internal JWT.",
+		"signIn": "Continue to sign in",
+		"organization": "Organization ID",
+		"organizationPlaceholder": "demo",
+		"organizationHint": "Use “forbidden” to exercise the service-level 403 permission response.",
+		"requesting": "Requesting…",
+		"validation": {
+			"organizationRequired": "Organization ID is required"
+		},
+		"startTask": {
+			"title": "Start crawl task",
+			"description": "Create a mock task using comma- or line-separated keywords.",
+			"keywords": "Task keywords",
+			"action": "Start task",
+			"result": "Start task response"
+		},
+		"contents": {
+			"title": "View crawl contents",
+			"description": "Read the mocked content list visible to this organization.",
+			"action": "Load contents",
+			"result": "Crawl contents response"
+		},
+		"keywords": {
+			"title": "Update keywords",
+			"description": "Replace the organization's mock crawl keyword configuration.",
+			"values": "Saved keywords",
+			"action": "Save keywords",
+			"result": "Update keywords response"
+		},
+		"response": {
+			"eyebrow": "RAW RESPONSE",
+			"waiting": "Choose an operation",
+			"hint": "The HTTP status, request URL and JSON body will appear here."
+		}
+	}
+}

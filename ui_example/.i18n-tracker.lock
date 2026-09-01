@@ -1,0 +1,9 @@
+{
+  "src/App.tsx": "3fb81119df0dd089db17ad256c9fe08a",
+  "src/main.tsx": "971d30b4a6c2cfa7777c625775e1120d",
+  "src/pages/xhs/console.tsx": "dea52d2679e401089e9fdad27316dfdc",
+  "src/foundation/lib/i18n.ts": "724aa6fb43516d023ef319741453602b",
+  "src/domains/xhs/types.ts": "ae389f4e102b97dda78c19a08f8263cc",
+  "src/domains/xhs/lib/api.ts": "c5dfe32255f3b9d42b3280f39212b173",
+  "vite.config.ts": "6e689df3df7eb0a37d7e5f780b3cf24d"
+}

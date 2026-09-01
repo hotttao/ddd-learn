@@ -1,4 +1,4 @@
-name: ddd-learn-auth-001
+name: ddd-learn-auth-002
 
 services:
   postgres:
@@ -13,7 +13,8 @@ services:
       timeout: 5s
       retries: 15
     volumes:
-      - auth-001-postgres:/var/lib/postgresql/data
+      # 002 使用自己的 Kratos 数据，和 001_auth 的认证状态隔离。
+      - auth-002-postgres:/var/lib/postgresql/data
 
   kratos-migrate:
     image: ghcr.io/hotttao/ory-kratos:v26.2.0
@@ -36,6 +37,24 @@ services:
       - "192.168.2.41:4433:4433"
       # 为后续管理页面预留 Kratos Admin API；生产环境必须增加访问控制。
       - "192.168.2.41:4434:4434"
+
+  kratos-seed:
+    # 一次性初始化教学用户；脚本按邮箱幂等检查，重复启动不会重复创建。
+    image: ghcr.io/hotttao/ory-kratos:v26.2.0
+    # Kratos 镜像默认 entrypoint 是 kratos；seed 需要直接运行 shell 脚本。
+    entrypoint: ["/bin/sh"]
+    command: ["/etc/config/kratos/seed-identities.sh"]
+    depends_on:
+      kratos:
+        condition: service_started
+    environment:
+      # 仅用于本地教学；生产环境应从 Secret 注入，不把明文密码写入配置。
+      ALICE_EMAIL: alice@example.com
+      ALICE_PASSWORD: Alice-password-2026
+      BOB_EMAIL: bob@example.com
+      BOB_PASSWORD: Bob-password-2026
+    volumes:
+      - ./kratos:/etc/config/kratos:ro
 
   kratos-courier:
     # Courier 与 Kratos API 使用同一个镜像，只是启动不同的子命令。
@@ -109,4 +128,5 @@ services:
       - "192.168.2.41:8080:80"
 
 volumes:
-  auth-001-postgres:
+  # 002 使用自己的 Kratos/PostgreSQL 数据存储。
+  auth-002-postgres:

@@ -2,10 +2,11 @@
 
 本目录是 Internal JWT 模块的独立部署目录。它从
 `deployments/001_auth` 复制基础配置作为起点，之后独立维护 Kratos、Traefik、
-PostgreSQL、Courier、Mailpit、Oathkeeper、JWKS 和鉴权路由配置。
+PostgreSQL、Courier、Mailpit、Oathkeeper、JWKS 和鉴权路由配置。当前 002 的
+PostgreSQL 使用自己的 `auth-002-postgres` volume，不读取或修改 001 的认证数据。
 
 复制配置表示继承上一步的部署基线，不表示两个 Compose 项目运行时共享容器或
-配置文件。后续本模块的修改只作用于本目录，`001_auth` 保持基础认证模块的状态。
+配置文件。后续本模块的配置和认证数据均只作用于本目录。
 
 ## 本模块的边界
 ```text
@@ -37,7 +38,8 @@ Mock response
 | JWKS | 提供签名和验签所需的密钥材料 | 用户和 Session 存储 |
 
 本模块采用 Oathkeeper Decision API 模式。Traefik 将 API Router 下的
-`/v1/<**>` 请求统一交给 Oathkeeper；两个端口的实际过程如下：
+`/v1/<.*>` 请求统一交给 Oathkeeper；`<.*>` 是 regexp 匹配策略下的路径表达式。
+两个端口的实际过程如下：
 
 ### 4455：Reverse Proxy
 
@@ -87,10 +89,10 @@ Oathkeeper 的宽匹配 Rule 只负责确认 Session 有效并签发 Internal JW
 Traefik 的 Router 与前缀保持一一对应：
 
 ```text
-/kratos/<**> -> kratos-public -> Kratos :4433
+/kratos/<path> -> kratos-public -> Kratos :4433
                不经过 Oathkeeper
 
-/v1/xhs/<**> -> xhs-api -> oathkeeper-forward-auth
+/v1/xhs/<path> -> xhs-api -> oathkeeper-forward-auth
              -> Oathkeeper :4456/decisions
              -> xhs_service :8082
 ```
@@ -105,6 +107,29 @@ Traefik 的 Router 与前缀保持一一对应：
 | `POST` | `/v1/xhs/organizations/:organization_id/crawl/tasks` | 启动抓取任务 | 返回 Mock 任务 ID 和 `pending` 状态 |
 | `GET` | `/v1/xhs/organizations/:organization_id/crawl/contents` | 查看抓取内容 | 返回固定内容列表 |
 | `PUT` | `/v1/xhs/organizations/:organization_id/crawl/keywords` | 修改抓取关键词 | 返回请求中的关键词或固定关键词列表 |
+
+步骤 6 使用保留的组织 ID `forbidden` 模拟业务权限拒绝。请求已经通过 Internal
+JWT 认证，但 `xhs_service` 的 Mock PermissionChecker 会返回拒绝，接口响应 `403`。
+该约定只用于本模块验收，下一模块接入 Keto 后删除。
+
+## 教学用户初始化
+
+`kratos-seed` 使用 Kratos Admin API 初始化两个开发用户。它不是 SQL migration：
+密码由 Kratos 负责哈希，脚本只提交一次性的明文密码，并按邮箱检查是否已经存在。
+
+| 用户 | 邮箱 | 开发密码 | `metadata_admin` |
+| --- | --- | --- | --- |
+| Alice | `alice@example.com` | `Alice-password-2026` | `organization_id=G`, `role=admin` |
+| Bob | `bob@example.com` | `Bob-password-2026` | `organization_id=G`, `role=member` |
+
+启动 Compose 后，初始化服务会自动执行；也可以手动重跑：
+
+```shell
+docker compose -f deployments/002_internal_jwt/docker-compose.yml run --rm kratos-seed
+```
+
+本阶段只初始化 Identity，不根据 `role` 判断业务权限。普通成员和管理员的
+权限关系在下一模块接入 Keto 后建立。
 
 ## 信任边界
 
@@ -130,7 +155,7 @@ deployments/
 │   ├── docker-compose.yml       # 002 的复制来源
 │   ├── kratos/
 │   └── traefik/
-└── 002_internal_jwt/            # 从 001 复制后独立演进
+└── 002_internal_jwt/            # 从 001 复制后独立演进，使用自己的认证 volume
     ├── README.md
     ├── docker-compose.yml
     ├── kratos/

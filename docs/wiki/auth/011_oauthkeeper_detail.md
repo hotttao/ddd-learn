@@ -284,7 +284,7 @@ Host + Path + Method
 ```yaml
 - id: internal-api-authentication
   match:
-    url: http://192.168.2.41:8080/v1/<**>
+    url: http://192.168.2.41:8080/v1/<.*>
     methods: [GET, POST, PUT, PATCH, DELETE]
   authenticators:
     - handler: cookie_session

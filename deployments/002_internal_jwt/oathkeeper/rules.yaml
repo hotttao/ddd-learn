@@ -5,7 +5,8 @@
     url: http://xhs_service:8082
   match:
     # 统一保护所有经过 API Router 的 /v1/ 接口。
-    url: http://192.168.2.41:8080/v1/<**>
+    # matching_strategy=regexp，尖括号内必须使用合法正则；.* 表示任意后续路径。
+    url: http://192.168.2.41:8080/v1/<.*>
     methods:
       - GET
       - POST

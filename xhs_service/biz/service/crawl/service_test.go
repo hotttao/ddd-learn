@@ -50,6 +50,27 @@ func TestServiceFailsClosedWhenKetoUnavailable(t *testing.T) {
 	}
 }
 
+func TestMockPermissionCheckerDeniesReservedOrganization(t *testing.T) {
+	checker := MockPermissionChecker{}
+	allowed, err := checker.Check(context.Background(), "identity:alice", "Organization", "forbidden", "view_crawl_content")
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if allowed {
+		t.Fatal("Check() allowed reserved organization, want denied")
+	}
+}
+
+func TestMockRepositoryProvidesDemoContents(t *testing.T) {
+	contents, err := NewMockRepository().ListContents(context.Background(), "demo")
+	if err != nil {
+		t.Fatalf("ListContents() error = %v", err)
+	}
+	if len(contents) != 2 || contents[0].ID != "note-001" {
+		t.Fatalf("ListContents() = %#v, want fixed demo contents", contents)
+	}
+}
+
 func TestNormalizeKeywords(t *testing.T) {
 	got, err := domain.NormalizeKeywords([]string{" a ", "a", "b"})
 	if err != nil || len(got) != 2 || got[0] != "a" || got[1] != "b" {
