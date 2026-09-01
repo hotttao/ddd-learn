@@ -46,6 +46,27 @@ services:
       # Write API：后续初始化脚本写入 Relation Tuple；不供浏览器调用。
       - "192.168.2.41:4467:4467"
 
+  keto-seed:
+    # 一次性把 Kratos identity 映射为 Keto 的组织关系。
+    image: m.daocloud.io/docker.io/curlimages/curl:8.10.1
+    entrypoint: ["/bin/sh"]
+    command: ["/etc/config/keto/seed-relations.sh"]
+    depends_on:
+      # 必须先完成用户初始化，脚本才能查询 Alice 和 Bob 的 identity.id。
+      kratos-seed:
+        condition: service_completed_successfully
+      keto:
+        condition: service_started
+    environment:
+      # 关系初始化使用的邮箱必须与 kratos-seed 保持一致。
+      ALICE_EMAIL: alice@example.com
+      BOB_EMAIL: bob@example.com
+      # 本步骤初始化的组织对象 ID。
+      ORGANIZATION_ID: G
+    volumes:
+      # 关系初始化脚本只读挂载，不允许容器修改部署文件。
+      - ./keto:/etc/config/keto:ro
+
   kratos-migrate:
     image: ghcr.io/hotttao/ory-kratos:v26.2.0
     command: migrate sql -e -y -c /etc/config/kratos/kratos.yml

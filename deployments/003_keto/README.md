@@ -27,16 +27,16 @@ KETO_ENABLED: "false"
 Browser
   │ Kratos Session Cookie
   ▼
-Traefik :8080
+Traefik host :8080
   │ ForwardAuth / Decision API
   ▼
-Oathkeeper :4456
+Oathkeeper host :4456 / container :4456
   │ Internal JWT
   ▼
 xhs_service :8082
   │ 第 4 步起调用 Keto Read API
   ▼
-Keto :4466
+Keto host :4466 / container :4466
 ```
 
 各组件职责如下：
@@ -55,10 +55,11 @@ Keto :4466
 
 | 地址 | 用途 | 调用方 |
 | --- | --- | --- |
-| `http://keto:4466` | Read API，检查权限和读取关系 | `xhs_service`、管理服务 |
-| `http://keto:4467` | Write API，写入或删除 Relation Tuple | 初始化脚本、可信管理服务 |
+| 容器内 `http://keto:4466` | Read API，检查权限和读取关系 | `xhs_service`、管理服务 |
+| 容器内 `http://keto:4467` | Write API，写入或删除 Relation Tuple | 初始化脚本、可信管理服务 |
 
-Keto 不经过 Traefik，也不供浏览器直接访问。宿主机映射端口仅用于本地教学调试；
+Keto 不经过 Traefik，也不供浏览器直接访问。宿主机映射端口为 `4466` 和 `4467`，
+仅用于本地教学调试；
 生产环境应限制 4467，只允许可信管理平面访问。
 
 ## OPL 配置
@@ -112,8 +113,78 @@ curl http://192.168.2.41:4466/health/ready
 curl http://192.168.2.41:4466/namespaces
 ```
 
-此时应该能够看到 `User` 和 `Organization`。关系数据尚未写入，因此还不能验证
-Alice 和 Bob 的业务权限。
+此时应该能够看到 `User` 和 `Organization`。随后执行 `keto-seed`，写入并验证
+Alice 和 Bob 的业务关系。
+
+## 关系初始化
+
+第 3 步由 `keto-seed` 完成关系初始化。它不会读取或信任
+`metadata_admin.role`，而是按邮箱从 Kratos Admin API 查询真实的 `identity.id`：
+
+```http
+GET http://kratos:4434/admin/identities?credentials_identifier=alice%40example.com
+GET http://kratos:4434/admin/identities?credentials_identifier=bob%40example.com
+```
+
+首先写入用户角色：
+
+```text
+PUT http://keto:4467/admin/relation-tuples
+Organization:G#admins@User:<alice-identity-id>
+
+PUT http://keto:4467/admin/relation-tuples
+Organization:G#members@User:<bob-identity-id>
+```
+
+然后分别写入组织权限和角色权限。组织 G 拥有三个操作，因此 `entitled_*` 会
+覆盖 `members` 和 `admins` 两个角色集合：
+
+```text
+Organization:G#entitled_start_crawl@Organization:G#members
+Organization:G#entitled_start_crawl@Organization:G#admins
+Organization:G#entitled_view_content@Organization:G#members
+Organization:G#entitled_view_content@Organization:G#admins
+Organization:G#entitled_modify_keywords@Organization:G#members
+Organization:G#entitled_modify_keywords@Organization:G#admins
+```
+
+角色层只把修改关键词授予管理员：
+
+```text
+Organization:G#granted_start_crawl@Organization:G#members
+Organization:G#granted_start_crawl@Organization:G#admins
+Organization:G#granted_view_content@Organization:G#members
+Organization:G#granted_view_content@Organization:G#admins
+Organization:G#granted_modify_keywords@Organization:G#admins
+```
+
+`keto/namespaces.ts` 使用 AND 计算最终权限：
+
+```typescript
+this.related.entitled_start_crawl.includes(ctx.subject) &&
+this.related.granted_start_crawl.includes(ctx.subject)
+```
+
+因此，角色权限只能是组织权限的子集：
+
+| 用户 | `start_crawl` | `view_content` | `modify_keywords` |
+| --- | ---: | ---: | ---: |
+| Alice (`admins`) | 允许 | 允许 | 允许 |
+| Bob (`members`) | 允许 | 允许 | 拒绝 |
+
+如果组织 W 只拥有查看权限，则只写 `entitled_view_content`。即使 W 的某个角色
+存在 `granted_start_crawl`，因为缺少 `entitled_start_crawl`，最终仍然是
+`false && true = false`。
+
+手动执行关系初始化：
+
+```shell
+docker compose -f deployments/003_keto/docker-compose.yml up keto-seed
+```
+
+`keto-seed` 是一次性 Job，重复执行不会创建重复关系。容器内和宿主机调试端口
+都是 `4467`。Write API 只应由初始化脚本或可信管理服务调用，浏览器不应
+直接访问。
 
 ## 目录结构
 
@@ -129,7 +200,8 @@ deployments/
     ├── traefik/
     └── keto/
         ├── keto.yml
-        └── namespaces.ts
+        ├── namespaces.ts
+        └── seed-relations.sh
 ```
 
 `id_token.jwks.json` 是开发环境私钥，只挂载给 Oathkeeper。业务服务只通过
