@@ -24,9 +24,8 @@ Bob：普通成员
 2. 创建 `deployments/003_keto` 独立部署，增加 Keto、Keto 数据库和迁移流程。
 3. 初始化 Alice、Bob 与组织 G 的 Keto Relation Tuple。
 4. 将 `xhs_service` 的业务接口接入 Keto 权限校验。
-5. 增加面向 UI 的组织权限快照接口。
-6. UI 根据权限快照显示不同的子页面和操作入口。
-7. 使用 Alice、Bob 验证权限矩阵，并补充请求流程文档。
+5. 增加当前用户所属组织接口，UI 登录后自动选择组织，不把组织和权限写入 Internal JWT。
+6. 使用 Alice、Bob 验证权限矩阵，并补充请求流程文档。
 
 ## 第 1 步：权限模型
 
@@ -42,4 +41,6 @@ Bob：普通成员
 | 查看抓取内容权限 | `view_content`，管理员和普通成员都拥有 |
 | 修改抓取关键词权限 | `modify_keywords`，仅管理员拥有 |
 
-Relation 表示用户与组织之间的事实关系，Permission 由 OPL 根据 Relation 计算得出。UI 获取的是 Permission 结果，不直接读取角色关系；后端业务接口仍然必须独立执行权限校验。
+Relation 表示用户与组织之间的事实关系，Permission 由 OPL 根据 Relation 计算得出。
+UI 通过 `xhs_service` 获取当前用户的组织和角色，不直接访问 Keto；业务接口仍然
+必须独立检查对应 Permission。

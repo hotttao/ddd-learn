@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package xhs_service.organization;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "xhs_service/organization";
+
+service OrganizationService {
+  rpc ListMyOrganizations(ListMyOrganizationsRequest) returns (ListMyOrganizationsResponse) {
+    option (google.api.http) = {get: "/v1/xhs/me/organizations"};
+    option (api.get) = "/v1/xhs/me/organizations";
+  }
+}
+
+message ListMyOrganizationsRequest {}
+
+message ListMyOrganizationsResponse {
+  repeated OrganizationMembership organizations = 1;
+}
+
+message OrganizationMembership {
+  string id = 1;
+  repeated string roles = 2;
+}

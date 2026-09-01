@@ -17,6 +17,15 @@ export type UpdateKeywordsResponse = {
   keywords?: string[];
 };
 
+export type OrganizationMembership = {
+  id: string;
+  roles?: string[];
+};
+
+export type ListMyOrganizationsResponse = {
+  organizations?: OrganizationMembership[];
+};
+
 export type XhsRequestResult<T> = {
   data: T;
   method: "GET" | "POST" | "PUT";

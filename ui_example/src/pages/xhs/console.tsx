@@ -1,13 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import {
   listCrawlContents,
+  listMyOrganizations,
   startCrawlTask,
   updateKeywords,
   XhsApiError,
 } from "@/domains/xhs/lib/api";
-import type { XhsRequestResult } from "@/domains/xhs/types";
+import type {
+  OrganizationMembership,
+  XhsRequestResult,
+} from "@/domains/xhs/types";
 import { useOrySession } from "@/foundation/providers/ory-session";
 import "./xhs.css";
 
@@ -31,11 +35,54 @@ function parseKeywords(value: string): string[] {
 export default function XhsConsolePage() {
   const { t } = useTranslation();
   const { status: sessionStatus, session } = useOrySession();
-  const [organizationId, setOrganizationId] = useState("demo");
+  const [organizations, setOrganizations] = useState<OrganizationMembership[]>(
+    [],
+  );
+  const [organizationId, setOrganizationId] = useState("");
+  const [organizationsLoading, setOrganizationsLoading] = useState(false);
   const [taskKeywords, setTaskKeywords] = useState("Ory, Hertz");
   const [savedKeywords, setSavedKeywords] = useState("Kratos, Oathkeeper");
   const [running, setRunning] = useState<Operation | null>(null);
   const [result, setResult] = useState<DisplayResult | null>(null);
+
+  useEffect(() => {
+    if (sessionStatus !== "authenticated" || !session) {
+      setOrganizations([]);
+      setOrganizationId("");
+      return;
+    }
+
+    let cancelled = false;
+    setOrganizationsLoading(true);
+    void listMyOrganizations()
+      .then((response) => {
+        if (cancelled) return;
+        const memberships = response.data.organizations ?? [];
+        setOrganizations(memberships);
+        setOrganizationId(memberships[0]?.id ?? "");
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setOrganizations([]);
+        setOrganizationId("");
+        if (error instanceof XhsApiError) {
+          setResult({
+            title: t("xhs.organizationLoadFailed"),
+            method: error.method,
+            path: error.path,
+            status: error.status,
+            body: error.body,
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setOrganizationsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionStatus, session, t]);
 
   const run = async <T,>(
     operation: Operation,
@@ -115,11 +162,24 @@ export default function XhsConsolePage() {
 
       <label className="xhs-console__organization">
         <span>{t("xhs.organization")}</span>
-        <input
+        <select
           value={organizationId}
           onChange={(event) => setOrganizationId(event.target.value)}
-          placeholder={t("xhs.organizationPlaceholder")}
-        />
+          disabled={organizationsLoading || organizations.length === 0}
+        >
+          {organizationId === "" && (
+            <option value="">
+              {organizationsLoading
+                ? t("xhs.organizationLoading")
+                : t("xhs.organizationEmpty")}
+            </option>
+          )}
+          {organizations.map((organization) => (
+            <option key={organization.id} value={organization.id}>
+              {organization.id} ({organization.roles?.join(", ")})
+            </option>
+          ))}
+        </select>
         <small>{t("xhs.organizationHint")}</small>
       </label>
 
@@ -137,7 +197,7 @@ export default function XhsConsolePage() {
           />
           <button
             type="button"
-            disabled={running !== null}
+            disabled={running !== null || organizationId === ""}
             onClick={() =>
               void run("task", t("xhs.startTask.result"), () =>
                 startCrawlTask(
@@ -162,7 +222,7 @@ export default function XhsConsolePage() {
           <div className="xhs-operation__spacer" />
           <button
             type="button"
-            disabled={running !== null}
+            disabled={running !== null || organizationId === ""}
             onClick={() =>
               void run("contents", t("xhs.contents.result"), () =>
                 listCrawlContents(organizationId.trim()),
@@ -188,7 +248,7 @@ export default function XhsConsolePage() {
           />
           <button
             type="button"
-            disabled={running !== null}
+            disabled={running !== null || organizationId === ""}
             onClick={() =>
               void run("keywords", t("xhs.keywords.result"), () =>
                 updateKeywords(

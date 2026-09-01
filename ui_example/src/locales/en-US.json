@@ -24,8 +24,10 @@
 		"signInDescription": "These routes require a Kratos browser Session so Oathkeeper can issue an internal JWT.",
 		"signIn": "Continue to sign in",
 		"organization": "Organization ID",
-		"organizationPlaceholder": "demo",
-		"organizationHint": "Use “forbidden” to exercise the service-level 403 permission response.",
+		"organizationHint": "Loaded from the current user's Keto organization relationships.",
+		"organizationLoading": "Loading organizations…",
+		"organizationEmpty": "No organization membership",
+		"organizationLoadFailed": "Load organizations failed",
 		"requesting": "Requesting…",
 		"validation": {
 			"organizationRequired": "Organization ID is required"

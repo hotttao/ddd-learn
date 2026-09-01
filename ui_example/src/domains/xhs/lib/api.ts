@@ -1,5 +1,6 @@
 import type {
   ListCrawlContentsResponse,
+  ListMyOrganizationsResponse,
   StartCrawlTaskResponse,
   UpdateKeywordsResponse,
   XhsRequestResult,
@@ -84,6 +85,12 @@ export function startCrawlTask(
   keywords: string[],
 ): Promise<XhsRequestResult<StartCrawlTaskResponse>> {
   return request("POST", endpoint(organizationId, "tasks"), { keywords });
+}
+
+export function listMyOrganizations(): Promise<
+  XhsRequestResult<ListMyOrganizationsResponse>
+> {
+  return request("GET", "/v1/xhs/me/organizations");
 }
 
 export function listCrawlContents(

@@ -10,7 +10,9 @@ import (
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
 	crawlhandler "media_agent/xhs_service/biz/handler/crawl"
+	organizationhandler "media_agent/xhs_service/biz/handler/organization"
 	crawlservice "media_agent/xhs_service/biz/service/crawl"
+	organizationservice "media_agent/xhs_service/biz/service/organization"
 	"media_agent/xhs_service/biz/shared"
 	ketoclient "media_agent/xhs_service/biz/shared/client/keto"
 )
@@ -50,6 +52,7 @@ func main() {
 	crawlhandler.SetService(crawlservice.New(
 		crawlservice.NewMockRepository(), ketoClient, shared.NewID, time.Now,
 	))
+	organizationhandler.SetService(organizationservice.New(ketoClient))
 
 	h, err := suite.NewServer(context.Background())
 	if err != nil {

@@ -186,6 +186,32 @@ docker compose -f deployments/003_keto/docker-compose.yml up keto-seed
 都是 `4467`。Write API 只应由初始化脚本或可信管理服务调用，浏览器不应
 直接访问。
 
+## 当前用户所属组织
+
+UI 登录后请求：
+
+```http
+GET /v1/xhs/me/organizations
+```
+
+`xhs_service` 从 Internal JWT 取得 Kratos `identity.id`，然后查询 Keto：
+
+```http
+GET http://keto:4466/relation-tuples
+    ?namespace=Organization
+    &subject_id=User:<identity-id>
+```
+
+Alice 和 Bob 分别得到：
+
+```json
+{"organizations":[{"id":"G","roles":["admins"]}]}
+{"organizations":[{"id":"G","roles":["members"]}]}
+```
+
+UI 自动选择返回的第一个组织，不从 Internal JWT 读取组织和角色。具体业务请求
+仍携带 `organization_id`，并由 `xhs_service` 调用 Keto Check API 验证 Permission。
+
 ## 目录结构
 
 ```text

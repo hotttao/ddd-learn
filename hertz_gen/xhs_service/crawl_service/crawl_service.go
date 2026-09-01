@@ -49,15 +49,13 @@ func (s *CrawlServiceClient) StartCrawlTask(context context.Context, req *crawl.
 		setPathParams(map[string]string{
 			"organization_id": req.GetOrganizationId(),
 		}).
-		addHeaders(map[string]string{
-			"Authorization": req.GetAuthorization(),
-		}).
+		addHeaders(map[string]string{}).
 		setFormParams(map[string]string{}).
 		setFormFileParams(map[string]string{}).
 		setBodyParam(req).
 		setRequestOption(reqOpt...).
 		setResult(httpResp).
-		execute("POST", "/v1/organizations/:organization_id/crawl/tasks")
+		execute("POST", "/v1/xhs/organizations/:organization_id/crawl/tasks")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -75,15 +73,13 @@ func (s *CrawlServiceClient) ListCrawlContents(context context.Context, req *cra
 		setPathParams(map[string]string{
 			"organization_id": req.GetOrganizationId(),
 		}).
-		addHeaders(map[string]string{
-			"Authorization": req.GetAuthorization(),
-		}).
+		addHeaders(map[string]string{}).
 		setFormParams(map[string]string{}).
 		setFormFileParams(map[string]string{}).
 		setBodyParam(req).
 		setRequestOption(reqOpt...).
 		setResult(httpResp).
-		execute("GET", "/v1/organizations/:organization_id/crawl/contents")
+		execute("GET", "/v1/xhs/organizations/:organization_id/crawl/contents")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -101,15 +97,13 @@ func (s *CrawlServiceClient) GetKeywords(context context.Context, req *crawl.Get
 		setPathParams(map[string]string{
 			"organization_id": req.GetOrganizationId(),
 		}).
-		addHeaders(map[string]string{
-			"Authorization": req.GetAuthorization(),
-		}).
+		addHeaders(map[string]string{}).
 		setFormParams(map[string]string{}).
 		setFormFileParams(map[string]string{}).
 		setBodyParam(req).
 		setRequestOption(reqOpt...).
 		setResult(httpResp).
-		execute("GET", "/v1/organizations/:organization_id/crawl/keywords")
+		execute("GET", "/v1/xhs/organizations/:organization_id/crawl/keywords")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -127,15 +121,13 @@ func (s *CrawlServiceClient) UpdateKeywords(context context.Context, req *crawl.
 		setPathParams(map[string]string{
 			"organization_id": req.GetOrganizationId(),
 		}).
-		addHeaders(map[string]string{
-			"Authorization": req.GetAuthorization(),
-		}).
+		addHeaders(map[string]string{}).
 		setFormParams(map[string]string{}).
 		setFormFileParams(map[string]string{}).
 		setBodyParam(req).
 		setRequestOption(reqOpt...).
 		setResult(httpResp).
-		execute("PUT", "/v1/organizations/:organization_id/crawl/keywords")
+		execute("PUT", "/v1/xhs/organizations/:organization_id/crawl/keywords")
 	if err != nil {
 		return nil, nil, err
 	}

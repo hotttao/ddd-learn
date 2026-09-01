@@ -3,9 +3,27 @@
 
 openapi: 3.0.3
 info:
-    title: CrawlService API
+    title: ""
     version: 0.0.1
 paths:
+    /v1/xhs/me/organizations:
+        get:
+            tags:
+                - OrganizationService
+            operationId: OrganizationService_ListMyOrganizations
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMyOrganizationsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /v1/xhs/organizations/{organization_id}/crawl/contents:
         get:
             tags:
@@ -160,6 +178,22 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/CrawlContent'
+        ListMyOrganizationsResponse:
+            type: object
+            properties:
+                organizations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OrganizationMembership'
+        OrganizationMembership:
+            type: object
+            properties:
+                id:
+                    type: string
+                roles:
+                    type: array
+                    items:
+                        type: string
         StartCrawlTaskResponse:
             type: object
             properties:
@@ -192,3 +226,4 @@ components:
                         type: string
 tags:
     - name: CrawlService
+    - name: OrganizationService

@@ -63,7 +63,7 @@
 	font-weight: 700;
 }
 
-.xhs-console__organization input,
+.xhs-console__organization select,
 .xhs-operation textarea {
 	box-sizing: border-box;
 	width: 100%;
@@ -79,12 +79,12 @@
 		box-shadow 150ms ease;
 }
 
-.xhs-console__organization input {
+.xhs-console__organization select {
 	min-height: 3rem;
 	padding: 0 0.9rem;
 }
 
-.xhs-console__organization input:focus,
+.xhs-console__organization select:focus,
 .xhs-operation textarea:focus {
 	border-color: var(--app-color-focus);
 	background: var(--app-color-input-surface-hover);

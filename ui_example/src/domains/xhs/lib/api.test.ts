@@ -1,17 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { listCrawlContents, startCrawlTask } from "./api";
+import { listCrawlContents, listMyOrganizations, startCrawlTask } from "./api";
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("xhs api", () => {
   it("uses the service-owned prefix and includes the browser session", async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(
-        new Response('{"task_id":"task-1","status":"pending"}', {
-          status: 200,
-        }),
-      );
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response('{"task_id":"task-1","status":"pending"}', {
+        status: 200,
+      }),
+    );
 
     await startCrawlTask("team/a", ["Ory"]);
 
@@ -40,6 +38,25 @@ describe("xhs api", () => {
       body: { error: { message: "not authenticated" } },
       method: "GET",
       path: "/v1/xhs/organizations/demo/crawl/contents",
+    });
+  });
+
+  it("loads organizations for the current user", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response('{"organizations":[{"id":"G","roles":["admins"]}]}', {
+        status: 200,
+      }),
+    );
+
+    const response = await listMyOrganizations();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/v1/xhs/me/organizations",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(response.data.organizations?.[0]).toEqual({
+      id: "G",
+      roles: ["admins"],
     });
   });
 });
