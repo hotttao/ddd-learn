@@ -12,7 +12,7 @@
 //	shutdown, _ := suite.InitObservability()   // logger + tracing + metrics
 //	defer shutdown(context.Background())
 //
-//	h := suite.NewServer()                     // server + 全局 middleware
+//	h, _ := suite.NewServer(ctx)               // server + 全局 middleware
 //	register(h)                                // 生成的业务路由
 //	suite.RegisterRoutes(h)                    // 运维端点（health/pprof/metrics）
 //	suite.RegisterService()                    // 服务注册
@@ -139,9 +139,10 @@ func NewServerSuite(loader *config.Loader, opts ...Option) *ServerSuite {
 func (s *ServerSuite) Options() []hertzconfig.Option { return s.options }
 
 // Middlewares 返回按约定顺序组装的全局 middleware 列表（见 middleware.go）。
-// 供 NewServer 挂载；导出以支持顺序稳定性单测（contributing/server.md §12.1）。
-func (s *ServerSuite) Middlewares() []app.HandlerFunc {
-	return buildMiddlewareChain(s.Config())
+// 其中 Internal JWT 会在这里完成首次 JWKS 加载，因此初始化失败必须返回错误，
+// 禁止在认证配置错误时静默启动为未保护服务。
+func (s *ServerSuite) Middlewares(ctx context.Context) ([]app.HandlerFunc, error) {
+	return buildMiddlewareChain(ctx, s.Config())
 }
 
 // Config 返回当前配置快照（转发 loader.Current()）。
@@ -170,14 +171,19 @@ func (s *ServerSuite) InitObservability() (func(context.Context) error, error) {
 }
 
 // NewServer 创建 Hertz server 并挂载全局 middleware（启动期一次性消费 Config()）。
+// 需要 IO 的安全组件初始化集中在这里；失败时不返回一个缺少认证中间件的 server。
 //
 // 中间件顺序见 middleware.go。运维端点不在本方法注册——由 RegisterRoutes 统一注册。
-func (s *ServerSuite) NewServer() *server.Hertz {
+func (s *ServerSuite) NewServer(ctx context.Context) (*server.Hertz, error) {
+	middlewares, err := s.Middlewares(ctx)
+	if err != nil {
+		return nil, err
+	}
 	h := server.New(s.Options()...)
-	for _, mw := range s.Middlewares() {
+	for _, mw := range middlewares {
 		h.Use(mw)
 	}
-	return h
+	return h, nil
 }
 
 // RegisterRoutes 统一注册运维端点（统一入口）。

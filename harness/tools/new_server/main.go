@@ -236,7 +236,10 @@ func main() {
 	}
 	_ = db
 
-	h := suite.NewServer()
+	h, err := suite.NewServer(context.Background())
+	if err != nil {
+		log.Fatalf("init hertz server: %%v", err)
+	}
 	register(h)
 	suite.RegisterRoutes(h)
 

@@ -50,3 +50,8 @@ func _startcrawltaskMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _xhsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

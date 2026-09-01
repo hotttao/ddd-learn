@@ -10,28 +10,28 @@ option go_package = "xhs_service/crawl";
 service CrawlService {
   rpc StartCrawlTask(StartCrawlTaskRequest) returns (StartCrawlTaskResponse) {
     option (google.api.http) = {
-      post: "/v1/organizations/{organization_id}/crawl/tasks"
+      post: "/v1/xhs/organizations/{organization_id}/crawl/tasks"
       body: "task"
     };
-    option (api.post) = "/v1/organizations/:organization_id/crawl/tasks";
+    option (api.post) = "/v1/xhs/organizations/:organization_id/crawl/tasks";
   }
 
   rpc ListCrawlContents(ListCrawlContentsRequest) returns (ListCrawlContentsResponse) {
-    option (google.api.http) = {get: "/v1/organizations/{organization_id}/crawl/contents"};
-    option (api.get) = "/v1/organizations/:organization_id/crawl/contents";
+    option (google.api.http) = {get: "/v1/xhs/organizations/{organization_id}/crawl/contents"};
+    option (api.get) = "/v1/xhs/organizations/:organization_id/crawl/contents";
   }
 
   rpc GetKeywords(GetKeywordsRequest) returns (GetKeywordsResponse) {
-    option (google.api.http) = {get: "/v1/organizations/{organization_id}/crawl/keywords"};
-    option (api.get) = "/v1/organizations/:organization_id/crawl/keywords";
+    option (google.api.http) = {get: "/v1/xhs/organizations/{organization_id}/crawl/keywords"};
+    option (api.get) = "/v1/xhs/organizations/:organization_id/crawl/keywords";
   }
 
   rpc UpdateKeywords(UpdateKeywordsRequest) returns (UpdateKeywordsResponse) {
     option (google.api.http) = {
-      put: "/v1/organizations/{organization_id}/crawl/keywords"
+      put: "/v1/xhs/organizations/{organization_id}/crawl/keywords"
       body: "keywords"
     };
-    option (api.put) = "/v1/organizations/:organization_id/crawl/keywords";
+    option (api.put) = "/v1/xhs/organizations/:organization_id/crawl/keywords";
   }
 }
 

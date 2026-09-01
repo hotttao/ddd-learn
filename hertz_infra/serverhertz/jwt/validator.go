@@ -1,4 +1,4 @@
-package internaljwt
+package jwt
 
 import (
 	"context"

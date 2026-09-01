@@ -38,7 +38,7 @@ defer loader.Close()                        # 统一释放 watcher 资源
   ↓
 serverhertz.InitTracing / InitMetrics       # 进程级初始化
   ↓
-serverhertz.NewServer(suite)                # 创建 server + 挂全局 middleware（启动期一次性消费 loader.Current()）
+suite.NewServer(ctx)                        # 创建 server + 挂全局 middleware，初始化失败返回 error
   ↓
 register generated routes                   # hz 生成的业务路由
   ↓
@@ -162,6 +162,7 @@ media_agent/                                    # workspace 根（go.work）
 | access log | `access_log` | `accesslog.go` | `ServerSuite.Middlewares()` |
 | CORS | `cors` | `cors.go` | `ServerSuite.Middlewares()` |
 | 服务端限流 | `rate_limit` | `ratelimit.go` | `ServerSuite.Middlewares()` |
+| Internal JWT 认证 | `internal_jwt` | `serverhertz/jwt/` | `ServerSuite.Middlewares(ctx)` |
 | 链路追踪 | `otel` | `tracing.go` | `ServerSuite.Middlewares()` + `InitTracing()` |
 | 指标采集 | `prometheus` | `metrics.go` | `ServerSuite.Middlewares()` + `InitMetrics()` + `RegisterMetricsRoute()` |
 | pprof / debug | `pprof` | `pprof.go` | `RegisterPProfRoutes()` |
@@ -174,7 +175,7 @@ media_agent/                                    # workspace 根（go.work）
 - `consul_kv:` 块只服务动态配置中心（KV watch + deep-merge），与服务注册 (`consul:`) 物理隔离，不混字段；
 - 新增注册中心后端（如 Nacos）需新增独立顶级块（如 `nacos:`），不通过 `type` 字段区分；
 - 业务代码不直接读取这些治理配置；
-- 配置加载由 `hertz_infra/config` 统一负责，`serverhertz.NewServerSuite(cfg)` 只消费 `*configpb.Config`。
+- 配置加载由 `hertz_infra/config` 统一负责，`serverhertz.NewServerSuite(loader)` 只持有 `*config.Loader`。
 
 ### 4.2 配置 struct 结构
 
@@ -231,7 +232,7 @@ ServerSuite
 `server.go` 提供两个入口：
 
 - `NewServerSuite(loader *config.Loader) *ServerSuite`：loader → `ServerSuite`，启动期固化能力在此一次性消费 `loader.Current()`，可热更新能力组件在此自行 `loader.Subscribe`；
-- `NewServer(suite *ServerSuite) *server.Hertz`：创建 server + 挂全局 middleware（启动期一次性消费 `suite.Config()`）。
+- `suite.NewServer(ctx) (*server.Hertz, error)`：创建 server + 挂全局 middleware；Internal JWT 首次加载 JWKS 失败时拒绝启动。
 
 **配置订阅职责切分**（核心原则）：
 
@@ -255,7 +256,7 @@ ServerSuite
 推荐顺序（由外到内），在 `middleware.go` 中定义：
 
 ```text
-recovery → request_id → tracing → metrics → access_log → rate_limit → cors → handler
+recovery → request_id → tracing → metrics → access_log → rate_limit → cors → internal_jwt → handler
 ```
 
 > 治理职责对称约定：**限流只在 server 侧**（`serverhertz/ratelimit`），**熔断只在 client 侧**
@@ -318,7 +319,7 @@ recovery → request_id → tracing → metrics → access_log → rate_limit �
 5. `defer loader.Close()` 统一释放 watcher 资源（**必须 defer**，否则 watch goroutine 与 HTTP 连接泄漏）；
 6. `serverhertz.InitTracing(ctx, suite.Tracing)` 初始化进程级 tracing provider；
 7. `serverhertz.InitMetrics(suite.Metrics)` 初始化进程级 metrics exporter；
-8. `serverhertz.NewServer(suite)` 创建 Hertz server 并挂载全局 middleware（启动期一次性消费 `loader.Current()`）；
+8. `suite.NewServer(ctx)` 创建 Hertz server 并挂载全局 middleware（启动期一次性消费 `loader.Current()`，初始化失败返回 error）；
 9. 注册生成的业务路由（`register(h)`）；
 10. `serverhertz.RegisterHealthRoutes` / `RegisterPProfRoutes` / `RegisterMetricsRoute` 注册基础设施路由；
 11. `serverhertz.RegisterService(ctx, suite)` 注册服务，`defer` 反注册；
@@ -511,7 +512,7 @@ handler 测试不需要启动真实注册中心、真实 OTel、真实 Prometheu
 - [ ] `main.go` 调用 `loader.Attach(suite.KVSource())` 挂载可选的 KV 源；
 - [ ] `main.go` 调用 `loader.Watch()` 启动热更新；
 - [ ] `main.go` `defer loader.Close()` 释放 watcher 资源；
-- [ ] `main.go` 调用 `serverhertz.NewServer(suite)`；
+- [ ] `main.go` 调用 `suite.NewServer(ctx)` 并处理初始化错误；
 - [ ] `main.go` 调用 `serverhertz.RegisterService(ctx, suite)`；
 - [ ] `main.go` 在退出时反注册服务；
 - [ ] `main.go` 支持 graceful shutdown。

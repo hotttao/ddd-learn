@@ -24,7 +24,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
-    /v1/organizations/{organization_id}/crawl/contents:
+    /v1/xhs/organizations/{organization_id}/crawl/contents:
         get:
             tags:
                 - CrawlService
@@ -52,7 +52,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
-    /v1/organizations/{organization_id}/crawl/keywords:
+    /v1/xhs/organizations/{organization_id}/crawl/keywords:
         get:
             tags:
                 - CrawlService
@@ -113,7 +113,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
-    /v1/organizations/{organization_id}/crawl/tasks:
+    /v1/xhs/organizations/{organization_id}/crawl/tasks:
         post:
             tags:
                 - CrawlService

@@ -10,10 +10,8 @@ import (
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
 	crawlhandler "media_agent/xhs_service/biz/handler/crawl"
-	"media_agent/xhs_service/biz/middleware"
 	crawlservice "media_agent/xhs_service/biz/service/crawl"
 	"media_agent/xhs_service/biz/shared"
-	"media_agent/xhs_service/biz/shared/client/keto"
 )
 
 func main() {
@@ -44,21 +42,13 @@ func main() {
 	}
 	defer shutdownObs(context.Background())
 
-	internalJWT, err := middleware.NewInternalJWT(context.Background(), cfg.GetInternalJwt())
-	if err != nil {
-		log.Fatalf("init internal JWT: %v", err)
-	}
-	permissionClient, err := keto.New(cfg.GetKeto())
-	if err != nil {
-		log.Fatalf("init Keto client: %v", err)
-	}
 	crawlhandler.SetService(crawlservice.New(
-		crawlservice.NewMockRepository(), permissionClient, shared.NewID, time.Now,
+		crawlservice.NewMockRepository(), crawlservice.MockPermissionChecker{}, shared.NewID, time.Now,
 	))
 
-	h := suite.NewServer()
-	if internalJWT != nil {
-		h.Use(internalJWT.RequirePrefix("/v1/"))
+	h, err := suite.NewServer(context.Background())
+	if err != nil {
+		log.Fatalf("init hertz server: %v", err)
 	}
 	register(h)
 	suite.RegisterRoutes(h)

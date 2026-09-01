@@ -31,9 +31,11 @@ internal_jwt:
   refresh_interval_seconds: 300
   http_timeout_ms: 2000
   clock_skew_seconds: 30
+  protected_prefixes: ["/v1/xhs/"]
 
 keto:
-  enabled: ${KETO_ENABLED:-true}
+  # Keto is introduced in the next module; this module uses mock authorization.
+  enabled: ${KETO_ENABLED:-false}
   read_url: ${KETO_READ_URL:-http://127.0.0.1:4466}
   request_timeout_ms: 2000
 

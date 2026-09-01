@@ -20,15 +20,18 @@ func Register(r *server.Hertz) {
 	{
 		_v1 := root.Group("/v1", _v1Mw()...)
 		{
-			_organizations := _v1.Group("/organizations", _organizationsMw()...)
+			_xhs := _v1.Group("/xhs", _xhsMw()...)
 			{
-				_organization_id := _organizations.Group("/:organization_id", _organization_idMw()...)
+				_organizations := _xhs.Group("/organizations", _organizationsMw()...)
 				{
-					_crawl := _organization_id.Group("/crawl", _crawlMw()...)
-					_crawl.GET("/contents", append(_listcrawlcontentsMw(), crawl.ListCrawlContents)...)
-					_crawl.GET("/keywords", append(_getkeywordsMw(), crawl.GetKeywords)...)
-					_crawl.PUT("/keywords", append(_updatekeywordsMw(), crawl.UpdateKeywords)...)
-					_crawl.POST("/tasks", append(_startcrawltaskMw(), crawl.StartCrawlTask)...)
+					_organization_id := _organizations.Group("/:organization_id", _organization_idMw()...)
+					{
+						_crawl := _organization_id.Group("/crawl", _crawlMw()...)
+						_crawl.GET("/contents", append(_listcrawlcontentsMw(), crawl.ListCrawlContents)...)
+						_crawl.GET("/keywords", append(_getkeywordsMw(), crawl.GetKeywords)...)
+						_crawl.PUT("/keywords", append(_updatekeywordsMw(), crawl.UpdateKeywords)...)
+						_crawl.POST("/tasks", append(_startcrawltaskMw(), crawl.StartCrawlTask)...)
+					}
 				}
 			}
 		}

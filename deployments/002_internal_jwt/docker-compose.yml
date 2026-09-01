@@ -68,6 +68,25 @@ services:
       # 教学环境绑定局域网，方便查看 JWKS；生产环境应只允许内部网络访问。
       - "192.168.2.41:4456:4456"
 
+  xhs_service:
+    # xhs_service 只通过 Traefik 的 /v1/xhs 前缀对外提供接口。
+    build:
+      context: ../..
+      dockerfile: xhs_service/Dockerfile
+    depends_on:
+      oathkeeper:
+        condition: service_started
+    environment:
+      # 服务监听 Compose 网络内部地址，不直接暴露宿主机端口。
+      SERVER_ADDR: ":8082"
+      # 使用 Oathkeeper API 发布的公钥验证 Internal JWT。
+      INTERNAL_JWT_ISSUER: http://oathkeeper:4456/
+      INTERNAL_JWKS_URL: http://oathkeeper:4456/.well-known/jwks.json
+      # 第 003 模块才接入 Keto；当前接口使用 MockPermissionChecker。
+      KETO_ENABLED: "false"
+    expose:
+      - "8082"
+
   mailpit:
     # Mailpit 只用于教学环境接收邮件，不参与生产认证链路。
     image: m.daocloud.io/docker.io/axllent/mailpit:v1.27.8

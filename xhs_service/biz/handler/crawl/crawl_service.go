@@ -9,8 +9,8 @@ import (
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	crawl "media_agent/hertz_gen/model/xhs_service/crawl"
+	serverjwt "media_agent/hertz_infra/serverhertz/jwt"
 	domain "media_agent/xhs_service/biz/domain/crawl"
-	"media_agent/xhs_service/biz/middleware"
 	service "media_agent/xhs_service/biz/service/crawl"
 )
 
@@ -28,7 +28,7 @@ func StartCrawlTask(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusInternalServerError, "crawl service is not configured")
 		return
 	}
-	principal, ok := middleware.PrincipalFromContext(ctx)
+	principal, ok := serverjwt.PrincipalFromContext(ctx)
 	if !ok {
 		writeServiceError(c, service.ErrUnauthenticated)
 		return
@@ -55,7 +55,7 @@ func ListCrawlContents(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	principal, ok := middleware.PrincipalFromContext(ctx)
+	principal, ok := serverjwt.PrincipalFromContext(ctx)
 	if !ok {
 		writeServiceError(c, service.ErrUnauthenticated)
 		return
@@ -83,7 +83,7 @@ func GetKeywords(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	principal, ok := middleware.PrincipalFromContext(ctx)
+	principal, ok := serverjwt.PrincipalFromContext(ctx)
 	if !ok {
 		writeServiceError(c, service.ErrUnauthenticated)
 		return
@@ -107,7 +107,7 @@ func UpdateKeywords(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	principal, ok := middleware.PrincipalFromContext(ctx)
+	principal, ok := serverjwt.PrincipalFromContext(ctx)
 	if !ok {
 		writeServiceError(c, service.ErrUnauthenticated)
 		return

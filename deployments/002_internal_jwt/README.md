@@ -102,7 +102,7 @@ Traefik 的 Router 与前缀保持一一对应：
 
 | 方法 | 路径 | 用途 | Mock 结果 |
 | --- | --- | --- | --- |
-| `POST` | `/v1/xhs/organizations/:organization_id/crawl/tasks` | 启动抓取任务 | 返回固定任务 ID 和 `pending` 状态 |
+| `POST` | `/v1/xhs/organizations/:organization_id/crawl/tasks` | 启动抓取任务 | 返回 Mock 任务 ID 和 `pending` 状态 |
 | `GET` | `/v1/xhs/organizations/:organization_id/crawl/contents` | 查看抓取内容 | 返回固定内容列表 |
 | `PUT` | `/v1/xhs/organizations/:organization_id/crawl/keywords` | 修改抓取关键词 | 返回请求中的关键词或固定关键词列表 |
 

@@ -8,7 +8,8 @@
 //	metrics    ─ prometheus 计数
 //	accesslog  ─ 写访问日志（拿到 status / latency 后写）
 //	ratelimit  ─ 限流（在业务前）
-//	cors       ─ 处理预检（放最后，业务前一步）
+//	cors       ─ 处理预检
+//	internalJWT ─ 验证受保护业务路由的可信身份
 //
 // 治理职责（见 docs/plan/observability.md）：限流只在 server 侧，熔断只在 client 侧。
 // 故 server 中间件链无 circuitbreaker；熔断归 clienthertz。
@@ -17,18 +18,25 @@
 package serverhertz
 
 import (
+	"context"
+	"fmt"
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
 
 	configpb "media_agent/hertz_gen/config"
+	internaljwt "media_agent/hertz_infra/serverhertz/jwt"
 )
 
-func buildMiddlewareChain(cfg *configpb.Config) []app.HandlerFunc {
+func buildMiddlewareChain(ctx context.Context, cfg *configpb.Config) ([]app.HandlerFunc, error) {
 	chain := []app.HandlerFunc{}
 	appName := ""
 	if a := cfg.GetApp(); a != nil {
 		appName = a.GetName()
+	}
+	jwtMiddleware, err := internaljwt.NewMiddleware(ctx, cfg.GetInternalJwt())
+	if err != nil {
+		return nil, fmt.Errorf("serverhertz: initialize internal JWT: %w", err)
 	}
 	for _, mw := range []app.HandlerFunc{
 		newRecoveryMiddleware(cfg.GetRecovery()),
@@ -38,12 +46,13 @@ func buildMiddlewareChain(cfg *configpb.Config) []app.HandlerFunc {
 		newAccessLogMiddleware(cfg.GetAccessLog()),
 		newRateLimitMiddleware(cfg.GetRateLimit(), appName), // rate_limit 现为 repeated
 		newCORSMiddleware(cfg.GetCors()),
+		jwtMiddleware,
 	} {
 		if mw != nil {
 			chain = append(chain, mw)
 		}
 	}
-	return chain
+	return chain, nil
 }
 
 func msToDuration(ms int32) time.Duration {

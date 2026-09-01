@@ -249,9 +249,12 @@ biz/domain/
 └── <domain-b>/          # domain-b 实体、值对象、仓库接口
 ```
 
-#### `biz/middleware` — 全局 Hertz middleware
+#### `biz/middleware` — 服务私有 Hertz middleware
 
-手写的全局中间件：auth token 解析、request id、日志、tracing、CORS、recovery、限流。
+仅存放某个服务私有、不能跨服务复用的 Hertz middleware。
+共享治理中间件（request id、日志、tracing、CORS、recovery、限流）统一放在
+`hertz_infra/serverhertz`；共享 Internal JWT 认证统一放在
+`hertz_infra/serverhertz/jwt`。
 
 **职责**：提取技术上下文（request id、trace id、auth subject、tenant id），通过 `context.Context` 向后传递。
 

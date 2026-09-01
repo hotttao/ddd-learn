@@ -310,6 +310,8 @@ message InternalJWTConfig {
   int32 refresh_interval_seconds = 6;
   int32 http_timeout_ms = 7;
   int32 clock_skew_seconds = 8;
+  // 仅匹配这些 URL 前缀的入站请求；运维端点可保持公开。
+  repeated string protected_prefixes = 9;
 }
 
 message KetoConfig {

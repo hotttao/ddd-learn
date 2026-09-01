@@ -1,7 +1,7 @@
-// Package internaljwt verifies short-lived JWTs issued by the trusted edge.
+// Package jwt verifies short-lived JWTs issued by the trusted edge.
 // It contains no business authorization rules; services still decide which
 // routes require a principal and which resource permissions to check.
-package internaljwt
+package jwt
 
 import (
 	"fmt"
