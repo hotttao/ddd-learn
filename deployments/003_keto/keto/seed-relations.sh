@@ -25,7 +25,9 @@ email_query() {
 identity_id() {
 	email=$1
 	response=$(curl -fsS "$kratos_admin_url/admin/identities?credentials_identifier=$(email_query "$email")")
-	id=$(printf '%s' "$response" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -n 1)
+	# The response contains IDs for the identity, verifiable address, and recovery
+	# address. Only the first top-level identity.id is a valid Keto subject.
+	id=$(printf '%s' "$response" | sed -n 's/^[[:space:]]*\[[[:space:]]*{"id":"\([^"]*\)".*/\1/p')
 	if [ -z "$id" ]; then
 		printf 'Unable to find Kratos identity: %s\n' "$email" >&2
 		exit 1
