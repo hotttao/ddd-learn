@@ -1,55 +1,48 @@
-# gateway/001：UI 接入 Traefik
+# gateway/001：Traefik RateLimit
 
 ## 当前步骤
 
-本步骤把已构建的 `ui_example` Nginx 镜像接入当前 Traefik Docker 部署。UI 只负责
-提供静态文件，Traefik 负责根据路径把请求转发到 UI、Kratos 或 `xhs_service`。
+本步骤在 UI 静态路由上增加 Traefik `RateLimit` Middleware，观察 Gateway 的流量治理行为。它不改变 Kratos、Oathkeeper、Keto 或 `xhs_service` 的认证鉴权逻辑。
 
-## 启动
+## 配置
 
-前置条件：已构建镜像 `ui_example:0.0.1`。
+`traefik/dynamic.yml` 定义：
 
-```bash
-docker compose \
-  -f deployments/gateway/001_traefik_docker/docker-compose.yml \
-  up -d ui traefik
+```yaml
+ui-rate-limit:
+  rateLimit:
+    average: 5
+    burst: 2
 ```
 
-访问 UI：
+并将它挂到 UI Router：
 
 ```text
-http://192.168.2.41:8080/
+Browser → ui Router → ui-rate-limit → ui Service → Nginx
 ```
 
-## 路由边界
+含义是每个来源平均每秒允许 5 个请求，并额外允许 2 个突发请求。超过限制时，
+Traefik 直接返回 `429 Too Many Requests`，请求不会到达 Nginx。
+
+`/kratos` 和 `/v1/xhs` 使用各自更具体的 Router，不会经过这个 UI 限流 Middleware：
 
 ```text
-/kratos/*  → kratos-public → Kratos Public API
-/v1/xhs/*  → xhs-api → Oathkeeper ForwardAuth → xhs_service
-/*         → ui → Nginx 静态文件
+/kratos/*  → kratos-public
+/v1/xhs/*  → oathkeeper-forward-auth → xhs-api → xhs_service
+/*         → ui-rate-limit → ui → Nginx
 ```
-
-UI Router 使用 `priority: 1`，因此不会抢占更具体的 `/kratos` 和 `/v1/xhs` Router。
-浏览器请求 API 时仍然使用同源路径，不需要在 Nginx 中重复配置 API 代理。
 
 ## 验证
 
 ```bash
-curl http://192.168.2.41:8080/
-curl http://192.168.2.41:8080/login
-curl http://192.168.2.41:8080/v1/xhs/organizations/G/crawl/contents
+for i in $(seq 1 12); do
+  curl -s -o /dev/null -w "%{http_code}\n" \
+    http://192.168.2.41:8080/
+done
 ```
 
-预期结果：
+短时间连续请求应同时看到 `200` 和 `429`。Traefik Dashboard 和 Access Log 可以
+观察 `ui-rate-limit@file`、请求状态以及被限流的请求。
 
-- `/` 返回静态 `index.html`；
-- `/login` 返回 `index.html`，由 React Router 处理前端路由；
-- `/v1/xhs/...` 先经过 Oathkeeper，未登录时返回 `401`；
-- `/kratos/...` 不会被 UI Router 截获。
-
-Traefik Dashboard 可以观察三个 Router：`ui@file`、`kratos-public@file`、
-`xhs-api@file`，访问地址为：
-
-```text
-http://192.168.2.41:8081/dashboard/
-```
+限流只回答“请求速度是否超过入口策略”，不回答“用户是否有业务权限”。即使请求
+没有被限流，`/v1/xhs` 仍然要经过 Oathkeeper 和 `xhs_service` 的 Keto 检查。

@@ -26,6 +26,13 @@ http:
         authResponseHeaders:
           - Authorization
 
+    # UI 静态资源限流：每个来源平均每秒 5 个请求，额外允许 2 个突发请求。
+    # 这里只演示 Gateway 流量治理，不替代 xhs_service 的业务权限校验。
+    ui-rate-limit:
+      rateLimit:
+        average: 5
+        burst: 2
+
   # routers 负责匹配进入 Traefik 的请求，并选择 Middleware 和后端 Service。
   routers:
     # kratos-public 是 Kratos Public API Router 的名称，仅用于 Traefik 配置内部引用。
@@ -62,6 +69,8 @@ http:
         - web
       rule: PathPrefix(`/`)
       priority: 1
+      middlewares:
+        - ui-rate-limit
       service: ui
 
   # services 描述 Traefik 最终把请求转发到哪些后端实例。
