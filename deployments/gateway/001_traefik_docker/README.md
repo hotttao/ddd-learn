@@ -168,6 +168,78 @@ Browser/API request
 当前没有额外部署 Prometheus 或 OpenTelemetry Collector；本步骤先验证 Traefik
 自身能够产生并暴露观测数据，后续网关或可观测性模块再接入采集系统。
 
+### 10. Provider、Router、Middleware、Service 请求链路
+
+本部署只启用了 File Provider：Traefik 启动时读取
+`traefik/dynamic.yml`，并在文件变化后自动重新加载。Docker Compose 负责启动容器，
+但没有启用 Docker Provider，因此 Compose labels 不会生成本部署的路由。
+
+各对象的职责是：
+
+| 对象 | 当前实现 | 作用 |
+| --- | --- | --- |
+| Provider | File Provider | 把 `dynamic.yml` 转换成 Traefik 动态配置 |
+| Router | `kratos-public`、`xhs-api`、`ui` | 按入口和 URL 规则选择请求链路 |
+| Middleware | `kratos-strip-prefix`、`oathkeeper-forward-auth`、`ui-rate-limit` | 改写路径、执行认证或限制流量 |
+| Service | `kratos-public`、`xhs-api`、`ui` | 选择一个或多个后端地址 |
+
+三条实际请求链路如下：
+
+```text
+GET /kratos/self-service/login/api
+  → File Provider
+  → kratos-public Router
+  → kratos-strip-prefix Middleware
+  → kratos-public Service
+  → http://kratos:4433/self-service/login/api
+```
+
+```text
+GET /v1/xhs/organizations/G/crawl/contents
+  → File Provider
+  → xhs-api Router
+  → oathkeeper-forward-auth Middleware
+  → Oathkeeper /decisions
+  → xhs-api Service
+  → xhs_service 或 xhs_service_2:8082
+```
+
+```text
+GET /login
+  → File Provider
+  → ui Router
+  → ui-rate-limit Middleware
+  → ui Service
+  → http://ui:80
+  → Nginx 返回 React SPA index.html
+```
+
+`ui` 使用 `PathPrefix(`/`)` 作为兜底路由，但优先级为 `1`；`/kratos` 和
+`/v1/xhs` 的规则更具体，因此不会被 UI Router 截获。
+
+### 11. File Provider 与 Docker labels 的选择
+
+当前使用 File Provider 的原因是：
+
+1. 路由、认证边界和 Middleware 集中写在一个动态配置文件中，便于教学和审查；
+2. `oathkeeper-forward-auth`、`stripPrefix` 和限流配置可以直接看到完整关系；
+3. 不需要把网关规则分散到多个业务容器的 Compose labels 中。
+
+Docker labels 更适合容器数量变化频繁、希望服务启动后自动注册路由的场景。例如启用
+Docker Provider 后，可以在 `ui` 容器上声明 Router 和 Service labels。但这会让路由
+规则分散到各服务 Compose 配置，并且需要额外处理 Docker Socket 的访问权限。
+
+两种方式都产生相同的 Traefik 对象：
+
+```text
+File Provider:   dynamic.yml ───────────────┐
+                                             ├─→ Router → Middleware → Service
+Docker Provider: container labels ──────────┘
+```
+
+本步骤的结论是：Provider 只是配置来源，Router、Middleware 和 Service 才是实际请求
+处理模型；本部署选择 File Provider，不影响后续替换为 Docker Provider 的可能性。
+
 ## 启动和验证
 
 在仓库根目录执行：
