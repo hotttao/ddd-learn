@@ -138,7 +138,7 @@ services:
       # 教学环境绑定局域网，方便查看 JWKS；生产环境应只允许内部网络访问。
       - "192.168.2.41:4456:4456"
 
-  xhs_service:
+  xhs_service: &xhs_service
     # xhs_service 只通过 Traefik 的 /v1/xhs 前缀对外提供接口。
     build:
       context: ../../..
@@ -159,6 +159,10 @@ services:
       KETO_READ_URL: http://keto:4466
     expose:
       - "8082"
+
+  # 第二个相同的 xhs_service 实例，供 Traefik 负载均衡实验使用。
+  xhs_service_2:
+    <<: *xhs_service
 
   ui:
     # 使用已经构建好的 UI Nginx 静态文件镜像。

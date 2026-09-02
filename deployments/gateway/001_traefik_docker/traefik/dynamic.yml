@@ -78,9 +78,15 @@ http:
     # xhs-api 是业务服务的 Traefik 后端定义。
     xhs-api:
       loadBalancer:
-        # xhs_service 是本模块 Compose 中的业务 backend；当前先固定单实例路由。
+        # xhs_service 是本模块 Compose 中的业务 backend；两个实例由 Traefik 轮询。
         servers:
           - url: http://xhs_service:8082
+          - url: http://xhs_service_2:8082
+        # 实例停止后，Traefik 通过业务健康端点将其摘除。
+        healthCheck:
+          path: /health
+          interval: 5s
+          timeout: 2s
 
     # Traefik 只转发请求，静态文件由 UI 容器内的 Nginx 提供。
     ui:
