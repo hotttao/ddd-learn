@@ -193,6 +193,8 @@ services:
       - "192.168.2.41:8080:80"
       # Dashboard 入口：http://192.168.2.41:8081/dashboard/。
       - "192.168.2.41:8081:8080"
+      # Prometheus 指标入口：http://192.168.2.41:8082/metrics。
+      - "192.168.2.41:8082:8082"
 
 volumes:
   # 003 使用自己的 Kratos/PostgreSQL 数据存储。

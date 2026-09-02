@@ -3,6 +3,9 @@ entryPoints:
   web:
     # 业务 HTTP 入口；Compose 将容器 80 映射到宿主机 8080。
     address: ":80"
+  metrics:
+    # Prometheus 指标入口；只暴露给局域网测试，不承载业务请求。
+    address: ":8082"
 
 api:
   # 开启 Traefik Dashboard，便于观察 Router、Middleware 和 Service。
@@ -20,4 +23,10 @@ log:
   level: INFO
 
 # 记录每个请求的入口、匹配路由和响应状态，供本步骤观察。
-accessLog: {}
+accessLog:
+  format: json
+
+# 暴露 Traefik 自身的请求计数、响应耗时和 Router/Service 状态指标。
+metrics:
+  prometheus:
+    entryPoint: metrics

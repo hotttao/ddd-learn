@@ -22,7 +22,7 @@
 3. 使用现有 `xhs_service` 作为 backend，使用文件配置定义 `/v1/xhs` PathPrefix 路由；如有需要，再额外做一次 Docker labels Provider 对比实验。
 4. 启动两个 `xhs_service` 实例，验证 Traefik 负载均衡；停止一个实例，确认配置变化或健康检查如何摘除实例。
 5. 为测试路由增加 timeout 或 rate limit，制造慢请求和高频请求，记录响应、Access Log 和 Dashboard 状态。
-6. 在不改变 `/kratos`、`/v1/xhs` 认证边界的前提下，验证未认证、Alice、Bob 三组请求。
+6. 添加当前网关场景的可观测性，接入并验证请求链路、访问日志和基础指标，能够定位请求经过的 Router、Middleware 和后端 Service。
 7. 补充 Provider、Router、Middleware、Service 的请求链路文档，并说明文件配置与 labels 的适用差异。
 
 ## 完成标准
