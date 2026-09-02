@@ -1,7 +1,7 @@
 # 002_internal_jwt：Internal JWT
 
 本目录是 Internal JWT 模块的独立部署目录。它从
-`deployments/001_auth` 复制基础配置作为起点，之后独立维护 Kratos、Traefik、
+`deployments/auth/001_auth` 复制基础配置作为起点，之后独立维护 Kratos、Traefik、
 PostgreSQL、Courier、Mailpit、Oathkeeper、JWKS 和鉴权路由配置。当前 002 的
 PostgreSQL 使用自己的 `auth-002-postgres` volume，不读取或修改 001 的认证数据。
 
@@ -125,7 +125,7 @@ JWT 认证，但 `xhs_service` 的 Mock PermissionChecker 会返回拒绝，接�
 启动 Compose 后，初始化服务会自动执行；也可以手动重跑：
 
 ```shell
-docker compose -f deployments/002_internal_jwt/docker-compose.yml run --rm kratos-seed
+docker compose -f deployments/auth/002_internal_jwt/docker-compose.yml run --rm kratos-seed
 ```
 
 本阶段只初始化 Identity，不根据 `role` 判断业务权限。普通成员和管理员的

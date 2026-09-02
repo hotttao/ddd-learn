@@ -1,13 +1,13 @@
 ## 目标
 
 加入 Ory Oathkeeper，为内部服务生成 Internal JWT。先复制
-`deployments/001_auth` 作为本模块的部署基线，再在独立目录中增加 Oathkeeper
+`deployments/auth/001_auth` 作为本模块的部署基线，再在独立目录中增加 Oathkeeper
 和鉴权配置。使用现有的 `xhs_service` 作为受保护的业务服务；业务接口只返回
 Mock 数据，不实现真实抓取。
 
 ## 步骤
 
-1. 从 `deployments/001_auth` 复制基础配置，建立独立部署目录，明确 Oathkeeper、Traefik、Kratos 与 `xhs_service` 的边界，并固定 Mock 接口契约。
+1. 从 `deployments/auth/001_auth` 复制基础配置，建立独立部署目录，明确 Oathkeeper、Traefik、Kratos 与 `xhs_service` 的边界，并固定 Mock 接口契约。
 2. 准备 Internal JWT 的 JWKS 密钥。
 3. 配置 Oathkeeper 使用 Kratos Session，并通过 `id_token` Mutator 签发 Internal JWT。
 4. 将 Traefik 接入 Oathkeeper Decision API。

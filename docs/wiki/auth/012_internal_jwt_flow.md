@@ -13,7 +13,7 @@ toc:
   auto: false
 ---
 
-本文只描述当前仓库 `deployments/002_internal_jwt` 的实际链路。它采用
+本文只描述当前仓库 `deployments/auth/002_internal_jwt` 的实际链路。它采用
 Traefik ForwardAuth + Oathkeeper Decision API：浏览器携带 Kratos Session Cookie
 访问业务 API，Oathkeeper 验证 Cookie 后签发短期 Internal JWT，Traefik 再把 JWT
 传给 `xhs_service`。

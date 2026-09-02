@@ -21,7 +21,7 @@ Bob：普通成员
 ## 执行步骤
 
 1. 定义 Keto 的 Namespace、Relation 和 Permission，并固定用户与组织的标识格式。
-2. 创建 `deployments/003_keto` 独立部署，增加 Keto、Keto 数据库和迁移流程。
+2. 创建 `deployments/auth/003_keto` 独立部署，增加 Keto、Keto 数据库和迁移流程。
 3. 初始化 Alice、Bob 与组织 G 的 Keto Relation Tuple。
 4. 将 `xhs_service` 的业务接口接入 Keto 权限校验。
 5. 增加当前用户所属组织接口，UI 登录后自动选择组织，不把组织和权限写入 Internal JWT。

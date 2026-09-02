@@ -1,7 +1,7 @@
 # 003_keto：Keto 权限管理
 
 本目录是 Keto 模块的独立部署目录。它从
-`deployments/002_internal_jwt` 复制基础配置作为起点，之后独立维护 Kratos、
+`deployments/auth/002_internal_jwt` 复制基础配置作为起点，之后独立维护 Kratos、
 Traefik、PostgreSQL、Courier、Mailpit、Oathkeeper、JWKS 和 Keto。
 
 003 使用一个 PostgreSQL 容器，但创建 `ory` 和 `keto` 两个逻辑数据库；两者
@@ -80,7 +80,7 @@ Permission。OPL 是静态模型，Relation Tuple 是运行时数据；两者分
 在仓库根目录执行：
 
 ```shell
-docker compose -f deployments/003_keto/docker-compose.yml up -d
+docker compose -f deployments/auth/003_keto/docker-compose.yml up -d
 ```
 
 Compose 的启动顺序是：
@@ -98,7 +98,7 @@ PostgreSQL 的初始化脚本只在 `auth-003-postgres` volume 第一次创建�
 查看 Keto 服务日志：
 
 ```shell
-docker compose -f deployments/003_keto/docker-compose.yml logs -f keto
+docker compose -f deployments/auth/003_keto/docker-compose.yml logs -f keto
 ```
 
 验证 Read API：
@@ -179,7 +179,7 @@ this.related.granted_start_crawl.includes(ctx.subject)
 手动执行关系初始化：
 
 ```shell
-docker compose -f deployments/003_keto/docker-compose.yml up keto-seed
+docker compose -f deployments/auth/003_keto/docker-compose.yml up keto-seed
 ```
 
 `keto-seed` 是一次性 Job，重复执行不会创建重复关系。容器内和宿主机调试端口

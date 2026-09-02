@@ -1,9 +1,0 @@
-serve:
-  proxy:
-    port: 4455
-access_rules:
-  repositories:
-    - file:///etc/config/oathkeeper/rules.yaml
-authenticators: {}
-authorizers: {}
-mutators: {}

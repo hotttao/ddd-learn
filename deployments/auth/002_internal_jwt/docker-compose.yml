@@ -90,7 +90,7 @@ services:
   xhs_service:
     # xhs_service 只通过 Traefik 的 /v1/xhs 前缀对外提供接口。
     build:
-      context: ../..
+      context: ../../..
       dockerfile: xhs_service/Dockerfile
     depends_on:
       oathkeeper:

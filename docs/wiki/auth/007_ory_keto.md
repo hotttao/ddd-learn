@@ -572,7 +572,7 @@ log:
   level: info
 ```
 
-这是当前 `deployments/003_keto/keto/keto.yml` 使用的配置。关键配置是数据库、
+这是当前 `deployments/auth/003_keto/keto/keto.yml` 使用的配置。关键配置是数据库、
 Read/Write 监听地址和 OPL 文件。Read API 可以按检查流量水平扩容；Write API
 仅允许可信业务后台调用。生产环境应从 Secret 注入数据库口令并启用 TLS，不能
 直接复用这里的教学环境 DSN。
@@ -608,7 +608,7 @@ Proto 还定义了 `CheckService`、`ExpandService`、`ReadService`、`WriteServ
 本地启动：
 
 ```bash
-docker compose -f deployments/003_keto/docker-compose.yml up -d
+docker compose -f deployments/auth/003_keto/docker-compose.yml up -d
 ```
 
 仓库 Compose 使用 `ghcr.io/hotttao/ory-keto:v26.2.0`，暴露 4466/4467。生产环境先迁移再启动：

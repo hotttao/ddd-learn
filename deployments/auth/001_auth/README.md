@@ -36,7 +36,7 @@ Account UI 直接调用 Kratos Public API。当前开发环境额外映射 Admin
 后续步骤将在本目录中逐步增加以下内容：
 
 ```text
-deployments/001_auth/
+deployments/auth/001_auth/
 ├── README.md
 ├── docker-compose.yml
 ├── kratos/
