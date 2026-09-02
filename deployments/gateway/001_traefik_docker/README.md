@@ -1,266 +1,62 @@
-# 001_traefik_docker：Traefik Docker 部署基线
+# gateway/001：UI 静态镜像
 
-本目录是 Traefik Docker 模块的独立部署目录。它从
-`deployments/auth/002_internal_jwt` 复制基础配置作为起点，之后独立维护 Kratos、
-Traefik、PostgreSQL、Courier、Mailpit、Oathkeeper、JWKS 和 Keto。
+## 当前步骤
 
-本部署使用一个 PostgreSQL 容器，但创建 `ory` 和 `keto` 两个逻辑数据库；两者
-使用不同的数据库用户，不读取或修改 001、002 的运行数据。复制配置表示继承
-上一步的部署基线，不表示两个 Compose 项目运行时共享容器或配置文件。
+本目录继承 `deployments/auth/003_keto` 的认证和业务部署基线。本步骤只制作
+`ui_example` 的静态文件镜像，不把 UI 容器接入 Compose，也不修改 Traefik 路由。
 
-Traefik Dashboard 仅绑定到局域网地址 `192.168.2.41:8081`，访问地址为：
+## 构建过程
+
+构建上下文是 `ui_example`，不是仓库根目录：
+
+```bash
+docker build \
+  -f ui_example/Dockerfile \
+  -t ddd-learn-ui-example:gateway-001 \
+  ui_example
+```
+
+Dockerfile 使用多阶段构建：
 
 ```text
-http://192.168.2.41:8081/dashboard/
+国内 Node 镜像
+  → Yarn 使用 registry.npmmirror.com 安装依赖
+  → yarn build
+  → 国内 Nginx 镜像
+  → /usr/share/nginx/html
 ```
 
-`8080` 仍然是业务入口，Dashboard 使用 Traefik 容器内部的管理端口 `8080`，映射到
-宿主机 `8081`。`api.insecure` 只适用于本地教学，生产环境应通过认证和独立管理入口暴露。
+## 文件职责
 
-## 当前范围
+| 文件 | 作用 |
+| --- | --- |
+| `ui_example/Dockerfile` | 编译前端并制作 Nginx runtime 镜像 |
+| `ui_example/nginx.conf` | 提供静态文件和 React Router fallback |
+| `ui_example/.dockerignore` | 排除 `node_modules`、`dist` 和缓存 |
 
-当前基线包含 Keto 服务、数据库、迁移和 Alice/Bob Relation Tuple。后续步骤把
-`xhs_service` 切换到真实 Keto 校验：
+Nginx 提供两个访问行为：
 
-```yaml
-KETO_ENABLED: "true"
-KETO_READ_URL: http://keto:4466
+- `/` 返回编译后的 `index.html`；
+- 不存在的前端路径回退到 `index.html`，交给 React Router 处理；
+- `/health` 返回 `200 ok`，供后续 Gateway 健康检查使用。
+
+## 镜像验证
+
+使用临时容器验证镜像，不启动本模块的 Compose：
+
+```bash
+docker run --rm -d \
+  --name ddd-learn-ui-image-check \
+  -p 127.0.0.1:18080:80 \
+  ddd-learn-ui-example:gateway-001
+
+curl http://127.0.0.1:18080/
+curl http://127.0.0.1:18080/dashboard
+curl http://127.0.0.1:18080/health
+
+docker stop ddd-learn-ui-image-check
 ```
 
-`xhs_service` 不再使用 MockPermissionChecker。Keto 不可用或返回异常时采用
-fail-closed：业务接口返回 `503`，不会绕过权限检查。
-
-## 服务拓扑
-
-```text
-Browser
-  │ Kratos Session Cookie
-  ▼
-Traefik host :8080
-  │ ForwardAuth / Decision API
-  ▼
-Oathkeeper host :4456 / container :4456
-  │ Internal JWT
-  ▼
-xhs_service :8082
-  │ 调用 Keto Read API 检查业务 Permission
-  ▼
-Keto host :4466 / container :4466
-```
-
-## Traefik 路由
-
-当前使用 File Provider 加载 `traefik/dynamic.yml`：
-
-```text
-GET/POST/PUT /v1/xhs/*
-        │
-        ▼
-Router: xhs-api (PathPrefix(`/v1/xhs`))
-        │
-        ├── Middleware: oathkeeper-forward-auth
-        │
-        ▼
-Service: xhs-api
-        │
-        ▼
-http://xhs_service:8082
-```
-
-Traefik 只负责匹配路径、执行 ForwardAuth 和转发请求；组织、角色及业务 Permission
-仍由 `xhs_service` 和 Keto 处理。当前步骤不使用 Docker labels。
-
-各组件职责如下：
-
-| 组件 | 本模块职责 | 不负责的内容 |
-| --- | --- | --- |
-| Kratos | 验证用户 Session，提供 `identity.id` | 签发 Internal JWT、业务权限判断 |
-| Oathkeeper | 认证外部凭证，签发 Internal JWT | 业务权限和业务数据 |
-| Traefik | 接收请求并调用 Oathkeeper Decision API | 业务权限判断 |
-| `xhs_service` | 验证 Internal JWT，调用 Keto 判断业务权限 | 真实抓取实现 |
-| Keto | 根据 OPL 计算业务权限 | 用户登录和 JWT 签发 |
-| PostgreSQL `ory` 数据库 | 保存 Kratos Identity 和 Session | Keto Relation Tuple |
-| PostgreSQL `keto` 数据库 | 保存 Keto Relation Tuple 和内部数据 | Kratos Identity 和 Session |
-
-## Keto API
-
-| 地址 | 用途 | 调用方 |
-| --- | --- | --- |
-| 容器内 `http://keto:4466` | Read API，检查权限和读取关系 | `xhs_service`、管理服务 |
-| 容器内 `http://keto:4467` | Write API，写入或删除 Relation Tuple | 初始化脚本、可信管理服务 |
-
-Keto 不经过 Traefik，也不供浏览器直接访问。宿主机映射端口为 `4466` 和 `4467`，
-仅用于本地教学调试；
-生产环境应限制 4467，只允许可信管理平面访问。
-
-## OPL 配置
-
-`keto/keto.yml` 通过以下配置加载权限模型：
-
-```yaml
-namespaces:
-  location: file:///etc/config/keto/namespaces.ts
-```
-
-`namespaces.ts` 定义 `User`、`Organization`、`members`、`admins` 以及三个
-Permission。OPL 是静态模型，Relation Tuple 是运行时数据；两者分别由配置文件
-和数据库管理。
-
-## 启动和迁移
-
-在仓库根目录执行：
-
-```shell
-docker compose -f deployments/gateway/001_traefik_docker/docker-compose.yml up -d
-```
-
-Compose 的启动顺序是：
-
-```text
-postgres 健康
-  -> keto-migrate 完成
-  -> keto 启动
-```
-
-PostgreSQL 的初始化脚本只在 `gateway-001-postgres` volume 第一次创建时执行，负责
-创建 `keto` 数据库和 `keto` 用户。Kratos 仍按 002 的方式执行自己的 migration
-和用户初始化，使用同一个 PostgreSQL 实例中的 `ory` 数据库。
-
-查看 Keto 服务日志：
-
-```shell
-docker compose -f deployments/gateway/001_traefik_docker/docker-compose.yml logs -f keto
-```
-
-验证 Read API：
-
-```shell
-curl http://192.168.2.41:4466/health/ready
-```
-
-验证 OPL 已加载：
-
-```shell
-curl http://192.168.2.41:4466/namespaces
-```
-
-此时应该能够看到 `User` 和 `Organization`。随后执行 `keto-seed`，写入并验证
-Alice 和 Bob 的业务关系。
-
-## 关系初始化
-
-第 3 步由 `keto-seed` 完成关系初始化。它不会读取或信任
-`metadata_admin.role`，而是按邮箱从 Kratos Admin API 查询真实的 `identity.id`：
-
-```http
-GET http://kratos:4434/admin/identities?credentials_identifier=alice%40example.com
-GET http://kratos:4434/admin/identities?credentials_identifier=bob%40example.com
-```
-
-首先写入用户角色：
-
-```text
-PUT http://keto:4467/admin/relation-tuples
-Organization:G#admins@User:<alice-identity-id>
-
-PUT http://keto:4467/admin/relation-tuples
-Organization:G#members@User:<bob-identity-id>
-```
-
-然后分别写入组织权限和角色权限。组织 G 拥有三个操作，因此 `entitled_*` 会
-覆盖 `members` 和 `admins` 两个角色集合：
-
-```text
-Organization:G#entitled_start_crawl@Organization:G#members
-Organization:G#entitled_start_crawl@Organization:G#admins
-Organization:G#entitled_view_content@Organization:G#members
-Organization:G#entitled_view_content@Organization:G#admins
-Organization:G#entitled_modify_keywords@Organization:G#members
-Organization:G#entitled_modify_keywords@Organization:G#admins
-```
-
-角色层只把修改关键词授予管理员：
-
-```text
-Organization:G#granted_start_crawl@Organization:G#members
-Organization:G#granted_start_crawl@Organization:G#admins
-Organization:G#granted_view_content@Organization:G#members
-Organization:G#granted_view_content@Organization:G#admins
-Organization:G#granted_modify_keywords@Organization:G#admins
-```
-
-`keto/namespaces.ts` 使用 AND 计算最终权限：
-
-```typescript
-this.related.entitled_start_crawl.includes(ctx.subject) &&
-this.related.granted_start_crawl.includes(ctx.subject)
-```
-
-因此，角色权限只能是组织权限的子集：
-
-| 用户 | `start_crawl` | `view_content` | `modify_keywords` |
-| --- | ---: | ---: | ---: |
-| Alice (`admins`) | 允许 | 允许 | 允许 |
-| Bob (`members`) | 允许 | 允许 | 拒绝 |
-
-如果组织 W 只拥有查看权限，则只写 `entitled_view_content`。即使 W 的某个角色
-存在 `granted_start_crawl`，因为缺少 `entitled_start_crawl`，最终仍然是
-`false && true = false`。
-
-手动执行关系初始化：
-
-```shell
-docker compose -f deployments/gateway/001_traefik_docker/docker-compose.yml up keto-seed
-```
-
-`keto-seed` 是一次性 Job，重复执行不会创建重复关系。容器内和宿主机调试端口
-都是 `4467`。Write API 只应由初始化脚本或可信管理服务调用，浏览器不应
-直接访问。
-
-## 当前用户所属组织
-
-UI 登录后请求：
-
-```http
-GET /v1/xhs/me/organizations
-```
-
-`xhs_service` 从 Internal JWT 取得 Kratos `identity.id`，然后查询 Keto：
-
-```http
-GET http://keto:4466/relation-tuples
-    ?namespace=Organization
-    &subject_id=User:<identity-id>
-```
-
-Alice 和 Bob 分别得到：
-
-```json
-{"organizations":[{"id":"G","roles":["admins"]}]}
-{"organizations":[{"id":"G","roles":["members"]}]}
-```
-
-UI 自动选择返回的第一个组织，不从 Internal JWT 读取组织和角色。具体业务请求
-仍携带 `organization_id`，并由 `xhs_service` 调用 Keto Check API 验证 Permission。
-
-## 目录结构
-
-```text
-deployments/
-├── 002_internal_jwt/             # 003 的复制来源
-└── 001_traefik_docker/           # 从 auth/003_keto 复制后独立演进
-    ├── README.md
-    ├── docker-compose.yml
-    ├── jwks/
-    ├── kratos/
-    ├── oathkeeper/
-    ├── traefik/
-    └── keto/
-        ├── keto.yml
-        ├── namespaces.ts
-        └── seed-relations.sh
-```
-
-`id_token.jwks.json` 是开发环境私钥，只挂载给 Oathkeeper。业务服务只通过
-`/.well-known/jwks.json` 获取公钥。生产环境必须通过 Secret、Vault 或其他
-密钥管理系统提供私钥，不能把私钥提交到代码仓库。
+当前步骤的边界是“镜像可以独立提供静态文件”。下一步才把 `ui` 服务加入
+`deployments/gateway/001_traefik_docker/docker-compose.yml`，并由 Traefik 将根路径
+转发到它；`/kratos` 和 `/v1/xhs` 仍然保持原有路由优先级。
