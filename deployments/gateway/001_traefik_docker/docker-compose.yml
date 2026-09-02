@@ -1,0 +1,186 @@
+name: ddd-learn-gateway-001-traefik
+
+services:
+  postgres:
+    image: m.daocloud.io/docker.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_USER: ory
+      POSTGRES_PASSWORD: ory
+      POSTGRES_DB: ory
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ory -d ory"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+    volumes:
+      # 003 使用自己的 Kratos 数据，和 001、002 的认证状态隔离。
+      - gateway-001-postgres:/var/lib/postgresql/data
+      # 第一次初始化时创建 Keto 数据库和独立数据库用户。
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+
+  keto-migrate:
+    # 创建 Keto 所需的数据库表和索引；这是一次性 Compose Job。
+    image: ghcr.io/hotttao/ory-keto:v26.2.0
+    # v26 使用 `migrate up`；旧版的 `migrate sql` 命令已移除。
+    command: migrate up -y -c /etc/config/keto/keto.yml
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # migration 需要读取与 Keto 服务相同的 DSN 配置。
+      - ./keto:/etc/config/keto:ro
+
+  keto:
+    # Keto Read API 和 Write API；本步骤只部署服务，不写入关系数据。
+    image: ghcr.io/hotttao/ory-keto:v26.2.0
+    command: serve -c /etc/config/keto/keto.yml
+    depends_on:
+      keto-migrate:
+        condition: service_completed_successfully
+    volumes:
+      # OPL 和 Keto 配置只读挂载，模型随部署版本管理。
+      - ./keto:/etc/config/keto:ro
+    ports:
+      # Read API：xhs_service 后续通过它检查权限。
+      - "192.168.2.41:4466:4466"
+      # Write API：后续初始化脚本写入 Relation Tuple；不供浏览器调用。
+      - "192.168.2.41:4467:4467"
+
+  keto-seed:
+    # 一次性把 Kratos identity 映射为 Keto 的组织关系。
+    image: m.daocloud.io/docker.io/curlimages/curl:8.10.1
+    entrypoint: ["/bin/sh"]
+    command: ["/etc/config/keto/seed-relations.sh"]
+    depends_on:
+      # 必须先完成用户初始化，脚本才能查询 Alice 和 Bob 的 identity.id。
+      kratos-seed:
+        condition: service_completed_successfully
+      keto:
+        condition: service_started
+    environment:
+      # 关系初始化使用的邮箱必须与 kratos-seed 保持一致。
+      ALICE_EMAIL: alice@example.com
+      BOB_EMAIL: bob@example.com
+      # 本步骤初始化的组织对象 ID。
+      ORGANIZATION_ID: G
+    volumes:
+      # 关系初始化脚本只读挂载，不允许容器修改部署文件。
+      - ./keto:/etc/config/keto:ro
+
+  kratos-migrate:
+    image: ghcr.io/hotttao/ory-kratos:v26.2.0
+    command: migrate sql -e -y -c /etc/config/kratos/kratos.yml
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./kratos:/etc/config/kratos:ro
+
+  kratos:
+    image: ghcr.io/hotttao/ory-kratos:v26.2.0
+    command: serve -c /etc/config/kratos/kratos.yml --dev
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./kratos:/etc/config/kratos:ro
+    ports:
+      - "192.168.2.41:4433:4433"
+      # 为后续管理页面预留 Kratos Admin API；生产环境必须增加访问控制。
+      - "192.168.2.41:4434:4434"
+
+  kratos-seed:
+    # 一次性初始化教学用户；脚本按邮箱幂等检查，重复启动不会重复创建。
+    image: ghcr.io/hotttao/ory-kratos:v26.2.0
+    # Kratos 镜像默认 entrypoint 是 kratos；seed 需要直接运行 shell 脚本。
+    entrypoint: ["/bin/sh"]
+    command: ["/etc/config/kratos/seed-identities.sh"]
+    depends_on:
+      kratos:
+        condition: service_started
+    environment:
+      # 仅用于本地教学；生产环境应从 Secret 注入，不把明文密码写入配置。
+      ALICE_EMAIL: alice@example.com
+      ALICE_PASSWORD: Alice-password-2026
+      BOB_EMAIL: bob@example.com
+      BOB_PASSWORD: Bob-password-2026
+    volumes:
+      - ./kratos:/etc/config/kratos:ro
+
+  kratos-courier:
+    # Courier 与 Kratos API 使用同一个镜像，只是启动不同的子命令。
+    image: ghcr.io/hotttao/ory-kratos:v26.2.0
+    # 独立轮询 PostgreSQL 中的 courier_messages，并投递到配置的 SMTP 服务。
+    command: courier watch -c /etc/config/kratos/kratos.yml
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    volumes:
+      - ./kratos:/etc/config/kratos:ro
+
+  oathkeeper:
+    # 使用 Oathkeeper v26.2.0，为后续 xhs_service 签发 Internal JWT。
+    image: ghcr.io/hotttao/ory-oathkeeper:v26.2.0
+    # Oathkeeper 会启动两个监听面；本模块只映射 4456，业务链路不使用 4455。
+    command: serve -c /etc/oathkeeper/config.yaml
+    depends_on:
+      kratos:
+        condition: service_started
+    volumes:
+      # Oathkeeper 读取本模块自己的配置和 Access Rules。
+      - ./oathkeeper/config.yaml:/etc/oathkeeper/config.yaml:ro
+      - ./oathkeeper/rules.yaml:/etc/oathkeeper/rules.yaml:ro
+      # 只有 Oathkeeper 能读取包含私钥的 JWKS 文件。
+      - ./jwks/id_token.jwks.json:/etc/oathkeeper/id_token.jwks.json:ro
+    ports:
+      # 教学环境绑定局域网，方便查看 JWKS；生产环境应只允许内部网络访问。
+      - "192.168.2.41:4456:4456"
+
+  xhs_service:
+    # xhs_service 只通过 Traefik 的 /v1/xhs 前缀对外提供接口。
+    build:
+      context: ../../..
+      dockerfile: xhs_service/Dockerfile
+    depends_on:
+      oathkeeper:
+        condition: service_started
+      keto:
+        condition: service_started
+    environment:
+      # 服务监听 Compose 网络内部地址，不直接暴露宿主机端口。
+      SERVER_ADDR: ":8082"
+      # 使用 Oathkeeper API 发布的公钥验证 Internal JWT。
+      INTERNAL_JWT_ISSUER: http://oathkeeper:4456/
+      INTERNAL_JWKS_URL: http://oathkeeper:4456/.well-known/jwks.json
+      # 业务服务只调用 Read API；Keto 不可用时权限校验失败并返回 503。
+      KETO_ENABLED: "true"
+      KETO_READ_URL: http://keto:4466
+    expose:
+      - "8082"
+
+  mailpit:
+    # Mailpit 只用于教学环境接收邮件，不参与生产认证链路。
+    image: m.daocloud.io/docker.io/axllent/mailpit:v1.27.8
+    ports:
+      # SMTP 端口暴露到局域网，便于调试邮件投递。
+      - "192.168.2.41:1025:1025"
+      # Mailpit Web UI，可在浏览器中查看收到的邮件。
+      - "192.168.2.41:8025:8025"
+
+  traefik:
+    image: traefik:v3.1
+    command: --configFile=/etc/traefik/traefik.yml
+    depends_on:
+      kratos:
+        condition: service_started
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    ports:
+      - "192.168.2.41:8080:80"
+
+volumes:
+  # 003 使用自己的 Kratos/PostgreSQL 数据存储。
+  gateway-001-postgres:
