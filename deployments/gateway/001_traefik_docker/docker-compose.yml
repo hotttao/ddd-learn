@@ -160,6 +160,12 @@ services:
     expose:
       - "8082"
 
+  ui:
+    # 使用已经构建好的 UI Nginx 静态文件镜像。
+    image: ddd-learn-ui-example:gateway-001
+    expose:
+      - "80"
+
   mailpit:
     # Mailpit 只用于教学环境接收邮件，不参与生产认证链路。
     image: m.daocloud.io/docker.io/axllent/mailpit:v1.27.8

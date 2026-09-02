@@ -56,6 +56,14 @@ http:
       # 允许后才转发到 xhs_service。
       service: xhs-api
 
+    # 默认页面 Router；更具体的 /kratos 和 /v1/xhs Router 优先匹配。
+    ui:
+      entryPoints:
+        - web
+      rule: PathPrefix(`/`)
+      priority: 1
+      service: ui
+
   # services 描述 Traefik 最终把请求转发到哪些后端实例。
   services:
     # kratos-public 是供上方 Router 引用的后端 Service 名称。
@@ -73,3 +81,9 @@ http:
         # xhs_service 是本模块 Compose 中的业务 backend；当前先固定单实例路由。
         servers:
           - url: http://xhs_service:8082
+
+    # Traefik 只转发请求，静态文件由 UI 容器内的 Nginx 提供。
+    ui:
+      loadBalancer:
+        servers:
+          - url: http://ui:80

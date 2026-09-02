@@ -1,62 +1,55 @@
-# gateway/001：UI 静态镜像
+# gateway/001：UI 接入 Traefik
 
 ## 当前步骤
 
-本目录继承 `deployments/auth/003_keto` 的认证和业务部署基线。本步骤只制作
-`ui_example` 的静态文件镜像，不把 UI 容器接入 Compose，也不修改 Traefik 路由。
+本步骤把已构建的 `ui_example` Nginx 镜像接入当前 Traefik Docker 部署。UI 只负责
+提供静态文件，Traefik 负责根据路径把请求转发到 UI、Kratos 或 `xhs_service`。
 
-## 构建过程
+## 启动
 
-构建上下文是 `ui_example`，不是仓库根目录：
+前置条件：已构建镜像 `ddd-learn-ui-example:gateway-001`。
 
 ```bash
-docker build \
-  -f ui_example/Dockerfile \
-  -t ddd-learn-ui-example:gateway-001 \
-  ui_example
+docker compose \
+  -f deployments/gateway/001_traefik_docker/docker-compose.yml \
+  up -d ui traefik
 ```
 
-Dockerfile 使用多阶段构建：
+访问 UI：
 
 ```text
-国内 Node 镜像
-  → Yarn 使用 registry.npmmirror.com 安装依赖
-  → yarn build
-  → 国内 Nginx 镜像
-  → /usr/share/nginx/html
+http://192.168.2.41:8080/
 ```
 
-## 文件职责
+## 路由边界
 
-| 文件 | 作用 |
-| --- | --- |
-| `ui_example/Dockerfile` | 编译前端并制作 Nginx runtime 镜像 |
-| `ui_example/nginx.conf` | 提供静态文件和 React Router fallback |
-| `ui_example/.dockerignore` | 排除 `node_modules`、`dist` 和缓存 |
+```text
+/kratos/*  → kratos-public → Kratos Public API
+/v1/xhs/*  → xhs-api → Oathkeeper ForwardAuth → xhs_service
+/*         → ui → Nginx 静态文件
+```
 
-Nginx 提供两个访问行为：
+UI Router 使用 `priority: 1`，因此不会抢占更具体的 `/kratos` 和 `/v1/xhs` Router。
+浏览器请求 API 时仍然使用同源路径，不需要在 Nginx 中重复配置 API 代理。
 
-- `/` 返回编译后的 `index.html`；
-- 不存在的前端路径回退到 `index.html`，交给 React Router 处理；
-- `/health` 返回 `200 ok`，供后续 Gateway 健康检查使用。
-
-## 镜像验证
-
-使用临时容器验证镜像，不启动本模块的 Compose：
+## 验证
 
 ```bash
-docker run --rm -d \
-  --name ddd-learn-ui-image-check \
-  -p 127.0.0.1:18080:80 \
-  ddd-learn-ui-example:gateway-001
-
-curl http://127.0.0.1:18080/
-curl http://127.0.0.1:18080/dashboard
-curl http://127.0.0.1:18080/health
-
-docker stop ddd-learn-ui-image-check
+curl http://192.168.2.41:8080/
+curl http://192.168.2.41:8080/login
+curl http://192.168.2.41:8080/v1/xhs/organizations/G/crawl/contents
 ```
 
-当前步骤的边界是“镜像可以独立提供静态文件”。下一步才把 `ui` 服务加入
-`deployments/gateway/001_traefik_docker/docker-compose.yml`，并由 Traefik 将根路径
-转发到它；`/kratos` 和 `/v1/xhs` 仍然保持原有路由优先级。
+预期结果：
+
+- `/` 返回静态 `index.html`；
+- `/login` 返回 `index.html`，由 React Router 处理前端路由；
+- `/v1/xhs/...` 先经过 Oathkeeper，未登录时返回 `401`；
+- `/kratos/...` 不会被 UI Router 截获。
+
+Traefik Dashboard 可以观察三个 Router：`ui@file`、`kratos-public@file`、
+`xhs-api@file`，访问地址为：
+
+```text
+http://192.168.2.41:8081/dashboard/
+```
