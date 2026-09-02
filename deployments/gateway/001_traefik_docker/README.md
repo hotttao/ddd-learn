@@ -7,7 +7,7 @@
 
 ## 启动
 
-前置条件：已构建镜像 `ddd-learn-ui-example:gateway-001`。
+前置条件：已构建镜像 `ui_example:0.0.1`。
 
 ```bash
 docker compose \

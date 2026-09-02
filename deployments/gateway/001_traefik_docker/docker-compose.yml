@@ -162,7 +162,7 @@ services:
 
   ui:
     # 使用已经构建好的 UI Nginx 静态文件镜像。
-    image: ddd-learn-ui-example:gateway-001
+    image: ui_example:0.0.1
     expose:
       - "80"
 
