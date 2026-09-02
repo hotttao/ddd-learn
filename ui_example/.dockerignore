@@ -1,0 +1,6 @@
+# Dependencies and generated files are not needed inside the build context.
+node_modules/
+dist/
+coverage/
+.vite/
+stats.html
