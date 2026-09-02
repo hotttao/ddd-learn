@@ -8,6 +8,15 @@ Traefik、PostgreSQL、Courier、Mailpit、Oathkeeper、JWKS 和 Keto。
 使用不同的数据库用户，不读取或修改 001、002 的运行数据。复制配置表示继承
 上一步的部署基线，不表示两个 Compose 项目运行时共享容器或配置文件。
 
+Traefik Dashboard 仅绑定到局域网地址 `192.168.2.41:8081`，访问地址为：
+
+```text
+http://192.168.2.41:8081/dashboard/
+```
+
+`8080` 仍然是业务入口，Dashboard 使用 Traefik 容器内部的管理端口 `8080`，映射到
+宿主机 `8081`。`api.insecure` 只适用于本地教学，生产环境应通过认证和独立管理入口暴露。
+
 ## 当前范围
 
 当前基线包含 Keto 服务、数据库、迁移和 Alice/Bob Relation Tuple。后续步骤把

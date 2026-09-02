@@ -179,7 +179,10 @@ services:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
     ports:
+      # 业务入口：浏览器访问 /kratos 和 /v1/xhs。
       - "192.168.2.41:8080:80"
+      # Dashboard 入口：http://192.168.2.41:8081/dashboard/。
+      - "192.168.2.41:8081:8080"
 
 volumes:
   # 003 使用自己的 Kratos/PostgreSQL 数据存储。

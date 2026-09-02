@@ -1,7 +1,14 @@
-# Traefik static configuration for the local authentication gateway.
+# Traefik static configuration for the local Docker gateway experiment.
 entryPoints:
   web:
+    # 业务 HTTP 入口；Compose 将容器 80 映射到宿主机 8080。
     address: ":80"
+
+api:
+  # 开启 Traefik Dashboard，便于观察 Router、Middleware 和 Service。
+  dashboard: true
+  # 仅用于本地教学；Dashboard 通过独立的 8081 局域网端口暴露。
+  insecure: true
 
 providers:
   file:
@@ -12,4 +19,5 @@ providers:
 log:
   level: INFO
 
+# 记录每个请求的入口、匹配路由和响应状态，供本步骤观察。
 accessLog: {}
