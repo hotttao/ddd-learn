@@ -48,6 +48,28 @@ xhs_service :8082
 Keto host :4466 / container :4466
 ```
 
+## Traefik 路由
+
+当前使用 File Provider 加载 `traefik/dynamic.yml`：
+
+```text
+GET/POST/PUT /v1/xhs/*
+        │
+        ▼
+Router: xhs-api (PathPrefix(`/v1/xhs`))
+        │
+        ├── Middleware: oathkeeper-forward-auth
+        │
+        ▼
+Service: xhs-api
+        │
+        ▼
+http://xhs_service:8082
+```
+
+Traefik 只负责匹配路径、执行 ForwardAuth 和转发请求；组织、角色及业务 Permission
+仍由 `xhs_service` 和 Keto 处理。当前步骤不使用 Docker labels。
+
 各组件职责如下：
 
 | 组件 | 本模块职责 | 不负责的内容 |

@@ -70,6 +70,6 @@ http:
     # xhs-api 是业务服务的 Traefik 后端定义。
     xhs-api:
       loadBalancer:
-        # xhs_service 会在后续步骤加入本模块 Compose；当前只先固定路由边界。
+        # xhs_service 是本模块 Compose 中的业务 backend；当前先固定单实例路由。
         servers:
           - url: http://xhs_service:8082
