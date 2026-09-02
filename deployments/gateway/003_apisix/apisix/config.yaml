@@ -1,0 +1,401 @@
+# APISIX 启动后会把默认值展开写回本文件；未单独标注的默认项由 APISIX 提供。
+# 本文件仍是 APISIX 的启动配置，动态 Route/Upstream/Plugin/Consumer 存在 etcd。
+---
+# Nginx/OpenResty 运行参数；APISIX 数据面基于 OpenResty。
+nginx_config:
+  # Nginx 事件循环和连接处理配置。
+  event:
+    # 单个 worker 可同时处理的最大连接数。
+    worker_connections: 10620
+  # 注入 Nginx 主配置段的自定义片段。
+  main_configuration_snippet: ''
+  # 注入 Nginx http 配置段的自定义片段。
+  http_configuration_snippet: ''
+  # 注入 Nginx server 配置段的自定义片段。
+  http_server_configuration_snippet: ''
+  # 注入 Nginx location 配置段的自定义片段。
+  http_server_location_configuration_snippet: ''
+  # 注入 Admin API server 配置段的自定义片段。
+  http_admin_configuration_snippet: ''
+  # 注入 Nginx 配置结尾的自定义片段。
+  http_end_configuration_snippet: ''
+  # 注入 stream 配置段的自定义片段。
+  stream_configuration_snippet: ''
+  # Nginx 错误日志输出位置；/dev/stderr 由 Docker 收集。
+  error_log: /dev/stderr
+  # 错误日志级别。
+  error_log_level: info
+  # worker 数量；auto 根据 CPU 数量决定。
+  worker_processes: auto
+  # 是否让 worker 绑定 CPU。
+  enable_cpu_affinity: false
+  # Nginx 可打开的文件描述符上限。
+  worker_rlimit_nofile: 20480
+  # worker 优雅退出的最长等待时间。
+  worker_shutdown_timeout: 240s
+  # 定时器总数上限。
+  max_pending_timers: 16384
+  # 同时运行的定时器上限。
+  max_running_timers: 4096
+  # HTTP 相关 Nginx 参数。
+  http:
+    # 变量哈希表大小。
+    variables_hash_max_size: 2048
+    # 是否记录 HTTP 访问日志。
+    enable_access_log: true
+    # 访问日志输出位置。
+    access_log: /dev/stdout
+    # 访问日志格式。
+    access_log_format: $remote_addr - $remote_user [$time_local] $http_host "$request"
+      $status $body_bytes_sent $request_time "$http_referer" "$http_user_agent" $upstream_addr
+      $upstream_status $upstream_response_time "$upstream_scheme://$upstream_host$upstream_uri"
+    # 访问日志格式中的转义方式。
+    access_log_format_escape: default
+    # 访问日志缓冲区大小。
+    access_log_buffer: 16384
+    # HTTP Keep-Alive 超时时间。
+    keepalive_timeout: 60s
+    # 上游连接池配置。
+    upstream:
+      # 每个 worker 保持的上游空闲连接数。
+      keepalive: 320
+      # 单个连接可复用的请求数。
+      keepalive_requests: 1000
+      # 上游 Keep-Alive 超时时间。
+      keepalive_timeout: 60s
+    # 客户端请求头读取超时时间。
+    client_header_timeout: 60s
+    # 客户端请求体读取超时时间。
+    client_body_timeout: 60s
+    # 请求体大小上限；0 表示不限制。
+    client_max_body_size: 0
+    # 向客户端发送响应的超时时间。
+    send_timeout: 10s
+    # 是否允许 Header 名称包含下划线。
+    underscores_in_headers: 'on'
+    # 取得客户端 IP 的 Header。
+    real_ip_header: X-Real-IP
+    # 是否递归解析代理链中的真实 IP。
+    real_ip_recursive: 'off'
+    # 允许提供真实 IP Header 的可信来源。
+    real_ip_from:
+    - 127.0.0.1
+    - 'unix:'
+    proxy_ssl_server_name: true
+    charset: utf-8
+    lua_shared_dict:
+      balancer-ewma-locks: 10m
+      balancer-ewma-last-touched-at: 10m
+      etcd-cluster-health-check: 10m
+      plugin-limit-conn: 10m
+      plugin-limit-conn-redis-cluster-slot-lock: 1m
+      plugin-limit-req-redis-cluster-slot-lock: 1m
+      plugin-limit-req: 10m
+      plugin-limit-count: 10m
+      plugin-limit-count-redis-cluster-slot-lock: 1m
+      prometheus-metrics: 10m
+      plugin-api-breaker: 10m
+      discovery: 1m
+      jwks: 1m
+      introspection: 10m
+      access-tokens: 1m
+      ext-plugin: 1m
+      ocsp-stapling: 10m
+      cas-auth: 10m
+      tars: 1m
+      tracing_buffer: 10m
+      internal-status: 10m
+      upstream-healthcheck: 10m
+      worker-events: 10m
+      lrucache-lock: 10m
+      balancer-ewma: 10m
+  meta:
+    lua_shared_dict:
+      prometheus-metrics: 15m
+  # stream/TCP 代理相关配置。
+  stream:
+    # 是否记录 stream 访问日志。
+    enable_access_log: false
+    # stream 访问日志文件。
+    access_log: logs/access_stream.log
+    access_log_format: $remote_addr [$time_local] $protocol $status $bytes_sent $bytes_received
+      $session_time
+    access_log_format_escape: default
+    lua_shared_dict:
+      lrucache-lock-stream: 10m
+      plugin-limit-conn-stream: 10m
+      worker-events-stream: 10m
+      tars-stream: 1m
+      etcd-cluster-health-check-stream: 10m
+# APISIX 部署模式和控制面配置。
+deployment:
+  # traditional 模式：APISIX 自身同时承担数据面和配置读取。
+  role: traditional
+  # 动态配置提供者类型。
+  config_provider: etcd
+  # etcd 连接配置；Route 等对象保存于这里。
+  etcd:
+    # etcd watch 请求的超时时间。
+    watch_timeout: 50
+    # 启动时连接 etcd 的重试次数。
+    startup_retry: 2
+    # etcd TLS 配置；本实验使用 HTTP，因此只保留默认校验开关。
+    tls:
+      verify: true
+    # APISIX 在 etcd 中使用的键前缀。
+    prefix: /apisix
+    # etcd 服务地址。
+    host:
+    - http://etcd:2379
+    # etcd 请求超时时间。
+    timeout: 30
+  # Admin API 的认证、监听地址和访问控制。
+  admin:
+    # 是否要求 X-API-KEY。
+    admin_key_required: true
+    # Admin API Key 列表。
+    admin_key:
+    - name: admin
+      role: admin
+      key: edd1c657-da07-4c75-bf47-9b6f4a4e8c12
+    # 允许访问 Admin API 的网段；教学环境暂时开放。
+    allow_admin:
+    - 0.0.0.0/0
+    # Admin API 监听配置。
+    admin_listen:
+      # 监听所有容器网络接口。
+      ip: 0.0.0.0
+      # Admin API 容器端口。
+      port: 9180
+    # Admin API 使用的 etcd API 版本。
+    admin_api_version: v3
+    # 是否允许跨域调用 Admin API。
+    enable_admin_cors: true
+  # traditional 角色使用 etcd 作为配置来源。
+  role_traditional:
+    config_provider: etcd
+# 兼容旧版配置格式的 Admin API 配置；实际监听配置使用 deployment.admin。
+admin:
+  # Admin API 允许访问的网段。
+  allow_admin:
+  - 0.0.0.0/0
+  # Admin API Key。
+  admin_key:
+  - name: admin
+    role: admin
+    key: edd1c657-da07-4c75-bf47-9b6f4a4e8c12
+# 可用插件白名单；Route 创建 Plugin 时只能使用这里列出的插件。
+plugins:
+- real-ip
+- ai
+- client-control
+- proxy-control
+- request-id
+- zipkin
+- ext-plugin-pre-req
+- fault-injection
+- mocking
+- serverless-pre-function
+- cors
+- ip-restriction
+- ua-restriction
+- referer-restriction
+- csrf
+- uri-blocker
+- request-validation
+- chaitin-waf
+- multi-auth
+- openid-connect
+- cas-auth
+- authz-casbin
+- authz-casdoor
+- wolf-rbac
+- ldap-auth
+- hmac-auth
+- basic-auth
+- jwt-auth
+- jwe-decrypt
+- key-auth
+- consumer-restriction
+- attach-consumer-label
+- forward-auth
+- opa
+- authz-keycloak
+- proxy-cache
+- body-transformer
+- ai-prompt-template
+- ai-prompt-decorator
+- proxy-mirror
+- proxy-rewrite
+- workflow
+- api-breaker
+- ai-proxy
+- limit-conn
+- limit-count
+- limit-req
+- gzip
+- server-info
+- traffic-split
+- redirect
+- response-rewrite
+- degraphql
+- kafka-proxy
+- grpc-transcode
+- grpc-web
+- http-dubbo
+- public-api
+- prometheus
+- datadog
+- loki-logger
+- elasticsearch-logger
+- echo
+- loggly
+- http-logger
+- splunk-hec-logging
+- skywalking-logger
+- google-cloud-logging
+- sls-logger
+- tcp-logger
+- kafka-logger
+- rocketmq-logger
+- syslog
+- udp-logger
+- file-logger
+- clickhouse-logger
+- tencent-cloud-cls
+- inspect
+- example-plugin
+- aws-lambda
+- azure-functions
+- openwhisk
+- openfunction
+- serverless-post-function
+- ext-plugin-post-req
+- ext-plugin-post-resp
+# 可用于 TCP/stream 路由的插件白名单。
+stream_plugins:
+- ip-restriction
+- limit-conn
+- mqtt-proxy
+- syslog
+# 兼容旧版配置格式的 etcd 连接配置；当前主要配置位于 deployment.etcd。
+etcd:
+  watch_timeout: 50
+  startup_retry: 2
+  tls:
+    verify: true
+  prefix: /apisix
+  host:
+  - http://etcd:2379
+  timeout: 30
+# 插件级默认参数。
+plugin_attr:
+  # inspect 插件配置。
+  inspect:
+    delay: 3
+    hooks_file: /usr/local/apisix/plugin_inspect_hooks.lua
+  # server-info 插件上报周期。
+  server-info:
+    report_ttl: 60
+  # OpenTelemetry 插件默认导出配置；本步骤不启用外部 Collector。
+  opentelemetry:
+    trace_id_source: x-request-id
+    set_ngx_var: false
+    batch_span_processor:
+      max_export_batch_size: 16
+      drop_on_queue_full: false
+      max_queue_size: 1024
+      batch_timeout: 2
+      inactive_timeout: 1
+    collector:
+      request_headers:
+        Authorization: token
+      address: 127.0.0.1:4318
+      request_timeout: 3
+    resource:
+      service.name: APISIX
+  dubbo-proxy:
+    upstream_multiplex_count: 32
+  skywalking:
+    report_interval: 3
+    endpoint_addr: http://127.0.0.1:12800
+    service_name: APISIX
+    service_instance_name: APISIX Instance Name
+  zipkin:
+    set_ngx_var: false
+  proxy-mirror:
+    timeout:
+      send: 60s
+      read: 60s
+      connect: 60s
+  log-rotate:
+    max_kept: 168
+    enable_compression: false
+    timeout: 10000
+    max_size: -1
+    interval: 3600
+  # Prometheus 插件默认导出配置。
+  prometheus:
+    export_addr:
+      ip: 127.0.0.1
+      port: 9091
+    metric_prefix: apisix_
+    enable_export_server: true
+    export_uri: /apisix/prometheus/metrics
+# APISIX 数据面全局配置。
+apisix:
+  # 是否按 Servlet 规则规范化 URI。
+  normalize_uri_like_servlet: false
+  # 数据面 HTTP 监听端口；Compose 映射到宿主机 8080。
+  node_listen: 9080
+  # 是否启用开发模式。
+  enable_dev_mode: false
+  # 是否复用监听端口。
+  enable_reuseport: true
+  # 是否启用 IPv6。
+  enable_ipv6: true
+  # 是否启用 HTTP/2。
+  enable_http2: true
+  extra_lua_path: ''
+  extra_lua_cpath: ''
+  proxy_cache:
+    zones:
+    - disk_size: 1G
+      disk_path: /tmp/disk_cache_one
+      name: disk_cache_one
+      cache_levels: '1:2'
+      memory_size: 50m
+    - name: memory_cache
+      memory_size: 50m
+    cache_ttl: 10s
+  data_encryption:
+    enable_encrypt_fields: true
+    keyring:
+    - qeddd145sfvddff3
+    - edd1c9f0985e76a2
+  # 是否开启 APISIX Admin API。
+  enable_admin: true
+  events:
+    module: lua-resty-events
+  disable_sync_configuration_during_start: false
+  router:
+    ssl: radixtree_sni
+    http: radixtree_host_uri
+  enable_control: true
+  ssl:
+    ssl_session_tickets: false
+    listen:
+    - port: 9443
+      enable_http3: false
+    enable: true
+    ssl_protocols: TLSv1.2 TLSv1.3
+    ssl_ciphers: ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384
+  proxy_mode: http
+  resolver_timeout: 5
+  show_upstream_status_in_response_header: false
+  enable_resolv_search_opt: true
+  enable_server_tokens: true
+  delete_uri_tail_slash: false
+graphql:
+  max_size: 1048576
+...

@@ -1,4 +1,4 @@
-name: ddd-learn-auth-003-keto
+name: ddd-learn-gateway-003-apisix
 
 services:
   postgres:
@@ -14,7 +14,7 @@ services:
       retries: 15
     volumes:
       # 003 使用自己的 Kratos 数据，和 001、002 的认证状态隔离。
-      - auth-003-postgres:/var/lib/postgresql/data
+      - gateway-003-postgres:/var/lib/postgresql/data
       # 第一次初始化时创建 Keto 数据库和独立数据库用户。
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
 
@@ -139,7 +139,7 @@ services:
       - "192.168.2.41:4456:4456"
 
   xhs_service:
-    # xhs_service 只通过 Traefik 的 /v1/xhs 前缀对外提供接口。
+    # xhs_service 只通过 APISIX 的 /v1/xhs 前缀对外提供接口。
     build:
       context: ../../..
       dockerfile: xhs_service/Dockerfile
@@ -169,18 +169,38 @@ services:
       # Mailpit Web UI，可在浏览器中查看收到的邮件。
       - "192.168.2.41:8025:8025"
 
-  traefik:
-    image: traefik:v3.1
-    command: --configFile=/etc/traefik/traefik.yml
+  etcd:
+    # APISIX 使用 etcd 保存 Route、Upstream、Plugin 和 Consumer 配置。
+    image: m.daocloud.io/quay.io/coreos/etcd:v3.5.17
+    environment:
+      ETCD_NAME: apisix-etcd
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+      ETCD_ADVERTISE_CLIENT_URLS: http://etcd:2379
+      ALLOW_NONE_AUTHENTICATION: "yes"
+    volumes:
+      - gateway-003-etcd:/etcd-data
+    ports:
+      # 教学环境暴露 etcd，便于查看 APISIX 配置；生产环境不应开放此端口。
+      - "192.168.2.41:2379:2379"
+
+  apisix:
+    # APISIX 数据面和 Admin API；本步骤先验证服务能够启动并连接 etcd。
+    image: apache/apisix:3.11.0-debian
+    command: ["docker-start"]
     depends_on:
-      kratos:
+      etcd:
         condition: service_started
     volumes:
-      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
-      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      # APISIX 启动时会回写本地节点信息，因此配置文件需要可写挂载。
+      - ./apisix/config.yaml:/usr/local/apisix/conf/config.yaml
     ports:
-      - "192.168.2.41:8080:80"
+      # APISIX 业务入口；后续 Route 会把 /v1/xhs 转发给 xhs_service。
+      - "192.168.2.41:8080:9080"
+      # APISIX Admin API；只用于本地教学配置，不供浏览器直接访问。
+      - "192.168.2.41:9180:9180"
 
 volumes:
-  # 003 使用自己的 Kratos/PostgreSQL 数据存储。
-  auth-003-postgres:
+  # APISIX 实验使用独立 PostgreSQL 数据，避免影响 auth/003。
+  gateway-003-postgres:
+  # etcd 数据独立保存 APISIX 动态配置。
+  gateway-003-etcd:
