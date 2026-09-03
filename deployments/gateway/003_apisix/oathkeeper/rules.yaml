@@ -6,7 +6,9 @@
   match:
     # 统一保护所有经过 API Router 的 /v1/ 接口。
     # matching_strategy=regexp，尖括号内必须使用合法正则；.* 表示任意后续路径。
-    url: http://192.168.2.41:8080/v1/<.*>
+    # Oathkeeper 的 URL 模板必须包含协议和 Host；<.*> 让 Host、端口由任意网关匹配。
+    # 实际约束是 /v1/ 路径，避免把规则耦合到某个网关 IP 或宿主机端口。
+    url: http://<.*>/v1/<.*>
     methods:
       - GET
       - POST
