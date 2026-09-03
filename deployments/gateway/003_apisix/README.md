@@ -124,6 +124,29 @@ Route 匹配
   -> 已超限：APISIX 直接返回 429，不访问 Upstream
 ```
 
+## 第 4 步：接入 Oathkeeper External Auth
+
+在 Route 上增加 APISIX `forward-auth` Plugin：
+
+```text
+Client
+  → APISIX /v1/xhs
+  → Oathkeeper http://oathkeeper:4456/decisions
+  → 认证通过：返回 Authorization: Bearer <Internal JWT>
+  → APISIX 转发给 xhs_service
+```
+
+Oathkeeper 的 Rule 必须填写完整 URL 模板，但 Host 使用 `<.*>` 通配，因此实际只
+约束 `/v1/` 路径，不绑定某个网关 IP 或宿主机端口。APISIX 仍会传递它生成的
+`X-Forwarded-*` Header，客户端不能直接决定这些 Header 的可信值。
+
+APISIX 只负责调用外部认证服务和复制 `Authorization` 响应头，不签发 JWT；JWT
+仍由 Oathkeeper 的 `id_token` Mutator 生成。没有 Kratos Session Cookie 的请求由
+Oathkeeper 拒绝，不会进入 `xhs_service`。
+
+这避免了 APISIX `jwt-auth` 和 Oathkeeper 同时签发两种身份。后续如果改用 APISIX
+原生 JWT，需要使用独立测试 Route 和 Consumer，不能直接叠加到当前业务 Route。
+
 ## 配置边界
 
 - APISIX 动态配置保存于 etcd，不使用 Compose labels；

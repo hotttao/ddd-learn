@@ -54,6 +54,21 @@ curl -fsS -X PUT "${admin_url}/routes/1" \
         "rejected_code": 429,
         "rejected_msg": "APISIX route rate limit exceeded",
         "show_limit_quota_header": true
+      },
+      "forward-auth": {
+        "uri": "http://oathkeeper:4456/decisions",
+        "request_method": "GET",
+        "request_headers": [
+          "Authorization",
+          "Cookie",
+          "X-Forwarded-Method",
+          "X-Forwarded-Proto",
+          "X-Forwarded-Host",
+          "X-Forwarded-Uri"
+        ],
+        "upstream_headers": ["Authorization"],
+        "timeout": 3000,
+        "keepalive": true
       }
     },
     "upstream_id": 1
