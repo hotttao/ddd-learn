@@ -154,3 +154,32 @@ Oathkeeper 拒绝，不会进入 `xhs_service`。
 - `9180` 是管理面，不能作为业务入口；
 - `8080` 是宿主机数据面入口，容器内对应 APISIX `9080`；
 - etcd 的 `2379` 仅为教学调试暴露，生产环境应限制为 APISIX 管理网络。
+
+## 补充：接入 UI 主页面
+
+复用前面已经构建的 `ui_example:0.0.1` 镜像，并由 APISIX 增加三个独立对象：
+
+```text
+Upstream 2：ui:80
+Route 2：/* → Upstream 2
+Route 3：/kratos/* → kratos:4433（去掉 /kratos 前缀）
+```
+
+Route 2 是浏览器主页面的兜底路由，优先级低于 `/kratos/*` 和 `/v1/xhs/*`，所以静态
+页面、Kratos 公共 API、业务 API 分别进入各自的后端。UI 与业务接口使用同一个
+`192.168.2.41:8080` 来源，前端请求 `/v1/xhs/*` 不需要再配置 Vite 开发代理。
+
+访问主页面：
+
+```text
+http://192.168.2.41:8080/
+```
+
+`/login`、`/registration` 等前端路由由 Nginx 回退到 `index.html`；登录流程调用
+同源的 `/kratos/self-service/*`，业务请求仍经过 `/v1/xhs/*` 的 Oathkeeper 认证。
+
+启动或重新写入路由：
+
+```shell
+docker compose -f deployments/gateway/003_apisix/docker-compose.yml up -d ui apisix-seed
+```

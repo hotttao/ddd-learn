@@ -43,6 +43,7 @@ curl -fsS -X PUT "${admin_url}/routes/1" \
     "name": "xhs-api",
     "uri": "/v1/xhs/*",
     "host": "192.168.2.41",
+    "priority": 10,
     "methods": ["GET", "POST", "PUT"],
     "plugins": {
       "limit-count": {
@@ -74,4 +75,69 @@ curl -fsS -X PUT "${admin_url}/routes/1" \
     "upstream_id": 1
   }'
 
-echo "APISIX upstream 1 and route 1 are ready"
+curl -fsS -X PUT "${admin_url}/upstreams/2" \
+  -H "X-API-KEY: ${admin_key}" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "type": "roundrobin",
+    "nodes": {
+      "ui:80": 1
+    },
+    "checks": {
+      "active": {
+        "type": "http",
+        "http_path": "/health",
+        "healthy": {
+          "interval": 2,
+          "successes": 1
+        },
+        "unhealthy": {
+          "interval": 2,
+          "http_failures": 2,
+          "timeouts": 2,
+          "http_statuses": [500, 502, 503, 504]
+        }
+      }
+    }
+  }'
+
+curl -fsS -X PUT "${admin_url}/upstreams/3" \
+  -H "X-API-KEY: ${admin_key}" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "type": "roundrobin",
+    "nodes": {
+      "kratos:4433": 1
+    }
+  }'
+
+curl -fsS -X PUT "${admin_url}/routes/2" \
+  -H "X-API-KEY: ${admin_key}" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "name": "ui",
+    "uri": "/*",
+    "host": "192.168.2.41",
+    "priority": 1,
+    "methods": ["GET", "HEAD"],
+    "upstream_id": 2
+  }'
+
+curl -fsS -X PUT "${admin_url}/routes/3" \
+  -H "X-API-KEY: ${admin_key}" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "name": "kratos-public-api",
+    "uri": "/kratos/*",
+    "host": "192.168.2.41",
+    "priority": 5,
+    "methods": ["GET", "HEAD", "POST"],
+    "plugins": {
+      "proxy-rewrite": {
+        "regex_uri": ["^/kratos/(.*)", "/$1"]
+      }
+    },
+    "upstream_id": 3
+  }'
+
+echo "APISIX upstreams 1, 2, 3 and routes 1, 2, 3 are ready"

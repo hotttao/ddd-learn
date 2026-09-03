@@ -164,6 +164,12 @@ services:
   xhs_service_2:
     <<: *xhs_service
 
+  ui:
+    # 复用已经构建好的静态前端镜像，由 Nginx 提供 React/Vite 构建产物。
+    image: ui_example:0.0.1
+    expose:
+      - "80"
+
   mailpit:
     # Mailpit 只用于教学环境接收邮件，不参与生产认证链路。
     image: m.daocloud.io/docker.io/axllent/mailpit:v1.27.8
@@ -212,6 +218,10 @@ services:
       apisix:
         condition: service_started
       xhs_service_2:
+        condition: service_started
+      ui:
+        condition: service_started
+      kratos:
         condition: service_started
     environment:
       # 与 apisix/config.yaml 中 deployment.admin.admin_key 保持一致。
