@@ -18,7 +18,7 @@ serve:
       enabled: true
       # 只允许 Account UI 的开发环境地址访问 Public API。
       allowed_origins:
-        - http://192.168.2.41:5173
+        - http://192.168.2.41:8080
   admin:
     # Admin API 监听地址；后续部署不会把 4434 映射到宿主机。
     host: 0.0.0.0
@@ -29,10 +29,10 @@ serve:
 
 selfservice:
   # 未指定 return_to 时，Flow 完成后默认跳转到 Account UI 首页。
-  default_browser_return_url: http://192.168.2.41:5173/
+  default_browser_return_url: http://192.168.2.41:8080/
   # 允许 Flow 跳转的地址白名单，防止利用 return_to 进行开放重定向。
   allowed_return_urls:
-    - http://192.168.2.41:5173/
+    - http://192.168.2.41:8080/
 
   methods:
     password:
@@ -45,17 +45,17 @@ selfservice:
   flows:
     error:
       # Flow 发生错误时展示的 Account UI 页面。
-      ui_url: http://192.168.2.41:5173/error
+      ui_url: http://192.168.2.41:8080/error
 
     login:
       # 登录 Flow 的 Account UI 页面。
-      ui_url: http://192.168.2.41:5173/login
+      ui_url: http://192.168.2.41:8080/login
       # 登录 Flow 的有效期。
       lifespan: 10m
 
     registration:
       # 注册 Flow 的 Account UI 页面。
-      ui_url: http://192.168.2.41:5173/registration
+      ui_url: http://192.168.2.41:8080/registration
       # 注册 Flow 的有效期。
       lifespan: 10m
       after:
@@ -67,31 +67,31 @@ selfservice:
     logout:
       after:
         # 注销成功后跳转回登录页面。
-        default_browser_return_url: http://192.168.2.41:5173/login
+        default_browser_return_url: http://192.168.2.41:8080/login
 
     recovery:
       # 开启密码恢复 Flow。
       enabled: true
       # 密码恢复页面地址。
-      ui_url: http://192.168.2.41:5173/recovery
+      ui_url: http://192.168.2.41:8080/recovery
       # 使用一次性验证码完成密码恢复。
       use: code
 
     settings:
       # 已登录用户修改密码和个人资料的页面地址。
-      ui_url: http://192.168.2.41:5173/settings
+      ui_url: http://192.168.2.41:8080/settings
       # 高权限操作允许复用当前 Session 的最长时间。
       privileged_session_max_age: 15m
       after:
         password:
           # 密码修改成功后，在 continue_with 中要求浏览器返回 Account UI 首页。
-          default_browser_return_url: http://192.168.2.41:5173/
+          default_browser_return_url: http://192.168.2.41:8080/
 
     verification:
       # 开启邮箱验证 Flow。
       enabled: true
       # 邮箱验证页面地址。
-      ui_url: http://192.168.2.41:5173/verification
+      ui_url: http://192.168.2.41:8080/verification
       # 使用一次性验证码完成邮箱验证。
       use: code
 
