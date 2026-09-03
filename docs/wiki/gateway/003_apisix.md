@@ -1,106 +1,230 @@
 ---
 weight: 3
-title: "3 Apache APISIX 架构与 Kubernetes Gateway API"
+title: "3 Apache APISIX 部署模式与 Kubernetes Gateway API"
 date: 2026-08-29T08:00:00+08:00
 draft: false
-description: "通过 user-service 示例理解 APISIX、Ingress Controller、Gateway API 和服务发现"
+description: "先理解 APISIX Traditional 与 Hybrid，再分别接入 Kubernetes Gateway API"
 tags: ["gateway", "apisix"]
 categories: ["microservice"]
 ---
 
-## 1. APISIX 的定位
+## 1. 先区分两个维度
 
-APISIX 接入 Kubernetes Gateway API 后，系统分为三部分：
+理解 APISIX 与 Kubernetes Gateway API 时，最容易混淆的是“APISIX 如何部署”和
+“网关配置如何声明”。它们是两个独立维度：
 
-| 组件 | 运行形态 | 职责 |
+```text
+APISIX Traditional / Hybrid
+    = APISIX 管理面与数据面如何部署
+
+Kubernetes Gateway API
+    = Gateway、HTTPRoute 和 Backend 如何声明
+```
+
+因此，Gateway API 既可以接入 Traditional APISIX，也可以接入 Hybrid APISIX。
+Gateway API 不会自动决定 APISIX 使用哪种部署模式。
+
+本文使用如下业务示例：
+
+```text
+GET http://api.example.com/users/*
+    → Kubernetes Service user-service:80
+    → user Pod A/B:8080
+```
+
+## 2. APISIX 的两种运行拓扑
+
+### 2.1 Traditional 模式
+
+Traditional 模式中，同一组 APISIX 实例同时包含管理能力和数据面能力：
+
+```text
+Admin API / CI/CD / Controller
+              ↓
+        APISIX 实例
+        ├── Admin API :9180
+        ├── 读取 etcd
+        └── Gateway :9080
+              ↓
+           Backend
+```
+
+核心配置关系是：
+
+```yaml
+deployment:
+  role: traditional
+  role_traditional:
+    config_provider: etcd
+  etcd:
+    host:
+      - http://etcd:2379
+    prefix: /apisix
+
+apisix:
+  enable_admin: true
+  node_listen: 9080
+```
+
+配置流和请求流分别是：
+
+```text
+配置流：Admin API -> etcd -> APISIX
+请求流：Client -> APISIX -> Backend
+```
+
+这种模式组件少，适合本地开发、教学和规模较小的环境。它的代价是管理面和业务数据面
+没有完全隔离：APISIX 实例既需要读取配置，也处理外部业务流量。
+
+### 2.2 Hybrid / Decoupled 模式
+
+Hybrid 也称 Decoupled 模式，将 APISIX 拆分为 Control Plane 和 Data Plane：
+
+```text
+Admin API / CI/CD / Controller
+              ↓
+        Control Plane
+        ├── Admin API
+        ├── 连接 etcd
+        └── 发布配置
+              ↓ 安全配置通道
+        Data Plane A/B
+        ├── 不开放 Admin API
+        ├── 不直接访问 etcd
+        └── 处理业务请求
+              ↓
+           Backend
+```
+
+Control Plane 的核心配置：
+
+```yaml
+deployment:
+  role: control_plane
+  role_control_plane:
+    config_provider: etcd
+  etcd:
+    host:
+      - http://etcd:2379
+    prefix: /apisix
+```
+
+Data Plane 的核心配置关系：
+
+```yaml
+deployment:
+  role: data_plane
+  role_data_plane:
+    config_provider: control_plane
+    control_plane:
+      host:
+        - https://apisix-control-plane:<config-sync-port>
+
+apisix:
+  enable_admin: false
+  node_listen: 9080
+```
+
+`<config-sync-port>`、证书字段和挂载路径应以部署所用 APISIX 版本为准。生产环境应使用
+mTLS 保护 Control Plane 到 Data Plane 的配置通道。
+
+Hybrid 模式下的两条链路是：
+
+```text
+配置流：Admin API -> Control Plane -> etcd -> Data Plane
+请求流：Client -> Data Plane -> Backend
+```
+
+Data Plane 不需要 etcd 凭证，也不开放 Admin API。这样能够隔离管理权限，并允许多组
+Data Plane 在不同网络或区域复用同一个 Control Plane。
+
+### 2.3 两种模式对比
+
+| 对比项 | Traditional | Hybrid / Decoupled |
 | --- | --- | --- |
-| Gateway API | Kubernetes CRD | 声明入口、路由和后端 |
-| APISIX Ingress Controller | Deployment | 读取声明，生成并写入 APISIX 配置 |
-| APISIX | Deployment/Pod | 匹配路由、执行插件并代理请求 |
+| Admin API | 与数据面位于同一组实例 | 只位于 Control Plane |
+| etcd 访问 | APISIX 实例直接访问 | 只有 Control Plane 访问 |
+| 业务请求 | 同一实例处理 | 只由 Data Plane 处理 |
+| 配置同步 | APISIX watch etcd | Control Plane 发布给 Data Plane |
+| 部署复杂度 | 较低 | 较高，需要配置安全同步通道 |
+| 适用场景 | 开发、小规模环境 | 生产、多区域、管理面隔离 |
+
+APISIX 还支持 Standalone/YAML 等配置来源。这解决的是“配置从 etcd、YAML 还是其他
+控制面取得”，不等同于本文比较的管理面/数据面运行拓扑。
+
+## 3. Kubernetes Gateway API 在其中负责什么
+
+Kubernetes Gateway API 使用 CRD 声明入口和路由：
 
 ```text
-Gateway API 声明
-        ↓
+GatewayClass
+Gateway
+HTTPRoute
+Service / EndpointSlice
+```
+
+APISIX 本身不会直接读取 `HTTPRoute`。APISIX Ingress Controller 负责监听这些资源，
+再生成 APISIX Route、Upstream 和 Plugin 配置：
+
+```text
+Kubernetes Gateway API
+          ↓ Watch
 APISIX Ingress Controller
-        ↓
-APISIX Route / Upstream / Plugin
-        ↓
-APISIX Pod 处理请求
+          ↓ 写入管理端点
+APISIX
 ```
 
-APISIX 可以脱离 Kubernetes 独立运行，不会直接读取 `HTTPRoute`。Ingress Controller 才是 Gateway API 控制面，但它不处理业务请求。
+这里有两个容易混淆的“控制面”：
 
-与 Envoy Gateway 不同，APISIX Ingress Controller 通常配置已经部署好的 APISIX，不会为每个 `Gateway` 创建一套代理 Pod 和 Service。
+| 组件 | 职责 |
+| --- | --- |
+| APISIX Ingress Controller | 把 Kubernetes 资源翻译为 APISIX 配置 |
+| APISIX Control Plane | 在 Hybrid 模式中存储并向 Data Plane 发布配置 |
 
-## 2. 示例与部署架构
+Ingress Controller 不处理业务请求，也不等同于 APISIX Hybrid Control Plane。
 
-业务服务如下：
+## 4. Traditional 模式接入 Kubernetes Gateway API
 
-```text
-Service: user-service:80
-└── EndpointSlice
-    ├── user Pod A: 10.0.1.11:8080
-    └── user Pod B: 10.0.2.12:8080
-```
+### 4.1 部署结构
 
-希望提供：
+Traditional 模式在 Kubernetes 中需要：
 
-```text
-GET http://api.example.com/users/* -> user-service
-```
-
-APISIX 由平台预先部署，并通过两个不同的 Kubernetes Service 暴露：
-
-```text
-apisix-admin
-└── ClusterIP:9180
-    Controller 通过它写入配置
-
-apisix-gateway
-└── LoadBalancer 203.0.113.10:80 -> APISIX Pod:9080
-    Client 通过它发送业务请求
-```
+- etcd；
+- Traditional APISIX Deployment；
+- `apisix-admin` ClusterIP Service；
+- `apisix-gateway` LoadBalancer 或 NodePort Service；
+- APISIX Ingress Controller；
+- Gateway API CRD。
 
 ```mermaid
 flowchart TB
     API[Kubernetes API<br/>Gateway / HTTPRoute / Service / EndpointSlice]
     IC[APISIX Ingress Controller]
-    ADMIN[apisix-admin Service:9180]
-    AP[APISIX Pods<br/>数据面监听 9080]
-    GW[apisix-gateway Service<br/>203.0.113.10:80]
+    ADMIN[apisix-admin Service :9180]
+    AP[Traditional APISIX Pods<br/>Admin + Data Plane]
+    ETCD[etcd]
+    GW[apisix-gateway Service<br/>80 -> 9080]
     C[Client]
-    U[user Pod A/B:8080]
+    U[user Pod A/B :8080]
 
     API -->|Watch| IC
-    IC -->|写入配置| ADMIN
+    IC -->|Admin API| ADMIN
     ADMIN --> AP
-    C -->|业务请求| GW
+    AP --> ETCD
+    C --> GW
     GW --> AP
     AP --> U
 ```
 
-## 3. Gateway API 如何关联 APISIX
+### 4.2 GatewayProxy 指向 Traditional Admin API
 
-### 3.1 GatewayClass 选择 Controller
-
-```yaml
-apiVersion: gateway.networking.k8s.io/v1
-kind: GatewayClass
-metadata:
-  name: apisix
-spec:
-  controllerName: apisix.apache.org/apisix-ingress-controller
-```
-
-### 3.2 GatewayProxy 选择 APISIX
-
-`GatewayProxy` 告诉 Controller 应该把配置写入哪套 APISIX：
+`GatewayProxy` 告诉 Ingress Controller 将转换后的配置写到哪里：
 
 ```yaml
 apiVersion: apisix.apache.org/v1alpha1
 kind: GatewayProxy
 metadata:
-  name: apisix-config
+  name: apisix-traditional
 spec:
   provider:
     type: ControlPlane
@@ -118,14 +242,130 @@ spec:
     - 203.0.113.10
 ```
 
-| 字段 | 作用 |
-| --- | --- |
-| `provider.controlPlane` | Controller 写配置使用的管理端点 |
-| `statusAddress` | 填入 `Gateway.status.addresses`，报告业务入口地址 |
+这里的 `provider.controlPlane` 是 Controller 写入配置的管理端点。即使 APISIX 使用
+Traditional 模式，该字段仍然叫 `controlPlane`；它不表示当前 APISIX 已经拆成 Hybrid。
 
-`statusAddress` 不会创建 IP、Service 或转发链路。这里的地址必须已经是可访问的 `apisix-gateway` 地址。
+`statusAddress` 只负责报告 `Gateway.status.addresses`，不会创建 IP、Service 或转发链路。
 
-### 3.3 Gateway 声明 Listener
+### 4.3 配置流和请求流
+
+```text
+配置流：
+Gateway API -> Ingress Controller -> apisix-admin:9180 -> etcd -> APISIX
+
+请求流：
+Client -> apisix-gateway:80 -> APISIX Pod:9080 -> user Pod:8080
+```
+
+Traditional APISIX Pod 同时出现在两条链路中。
+
+## 5. Hybrid 模式接入 Kubernetes Gateway API
+
+### 5.1 部署结构
+
+Hybrid 模式在 Kubernetes 中需要：
+
+- etcd，只允许 Control Plane 访问；
+- APISIX Control Plane Deployment；
+- Control Plane Admin Service；
+- Control Plane 配置同步 Service；
+- APISIX Data Plane Deployment；
+- Data Plane Gateway Service；
+- APISIX Ingress Controller；
+- Gateway API CRD 和 Control/Data Plane 间的 mTLS Secret。
+
+```mermaid
+flowchart TB
+    API[Kubernetes API<br/>Gateway / HTTPRoute / Service / EndpointSlice]
+    IC[APISIX Ingress Controller]
+    ADMIN[Control Plane Admin Service]
+    CP[APISIX Control Plane]
+    ETCD[etcd]
+    SYNC[配置同步 Service<br/>mTLS]
+    DP[APISIX Data Plane Pods]
+    GW[apisix-gateway Service<br/>80 -> 9080]
+    C[Client]
+    U[user Pod A/B :8080]
+
+    API -->|Watch| IC
+    IC -->|Admin API| ADMIN
+    ADMIN --> CP
+    CP --> ETCD
+    CP --> SYNC
+    SYNC --> DP
+    C --> GW
+    GW --> DP
+    DP --> U
+```
+
+### 5.2 GatewayProxy 只指向 Control Plane
+
+```yaml
+apiVersion: apisix.apache.org/v1alpha1
+kind: GatewayProxy
+metadata:
+  name: apisix-hybrid
+spec:
+  provider:
+    type: ControlPlane
+    controlPlane:
+      endpoints:
+        - http://apisix-control-plane-admin.ingress-apisix.svc.cluster.local:9180
+      auth:
+        type: AdminKey
+        adminKey:
+          valueFrom:
+            secretKeyRef:
+              name: apisix-admin-key
+              key: key
+  statusAddress:
+    - 203.0.113.10
+```
+
+与 Traditional 模式相比，Gateway、HTTPRoute 和业务 Service 可以完全相同。真正变化的
+是 `GatewayProxy` 的管理端点和 APISIX 的运行拓扑：
+
+```text
+Traditional：Controller -> Traditional APISIX Admin API
+Hybrid：     Controller -> Control Plane Admin API
+```
+
+Ingress Controller 不应该连接 Data Plane，Data Plane 也不应该暴露 Admin API。
+
+### 5.3 配置流和请求流
+
+```text
+配置流：
+Gateway API
+  -> Ingress Controller
+  -> Control Plane Admin API
+  -> etcd
+  -> Control Plane 配置同步
+  -> Data Plane
+
+请求流：
+Client
+  -> apisix-gateway:80
+  -> Data Plane Pod:9080
+  -> user Pod:8080
+```
+
+Control Plane 不处理正常业务流量，Data Plane 不读取 Kubernetes Gateway API。
+
+## 6. 两种模式共用的 Gateway API 资源
+
+### 6.1 GatewayClass 选择 APISIX Controller
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: apisix
+spec:
+  controllerName: apisix.apache.org/apisix-ingress-controller
+```
+
+### 6.2 Gateway 引用对应的 GatewayProxy
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -142,14 +382,13 @@ spec:
     parametersRef:
       group: apisix.apache.org
       kind: GatewayProxy
-      name: apisix-config
+      name: apisix-traditional
 ```
 
-这表示：使用 APISIX Controller，通过 `apisix-config` 指定的管理端点，为 `http` Listener 生成配置。
+使用 Hybrid 时，只需将 `parametersRef.name` 改成 `apisix-hybrid`。Gateway 本身不会创建
+APISIX Deployment、Service 或监听端口。
 
-它不会创建 APISIX Deployment、`apisix-gateway` Service 或 APISIX 监听端口。多个 Gateway 可以引用同一个 GatewayProxy，共同使用一套 APISIX。
-
-### 3.4 HTTPRoute 绑定 Listener 和后端
+### 6.3 HTTPRoute 声明匹配条件和后端
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -172,125 +411,92 @@ spec:
           port: 80
 ```
 
-`parentRefs` 将 Route 绑定到 Gateway 的 `http` Listener，`backendRefs` 指定后端 `user-service:80`。
+`parentRefs` 把 Route 绑定到 Gateway 的 `http` Listener，`backendRefs` 指向 Kubernetes
+Service。Traditional 与 Hybrid 使用相同的 HTTPRoute。
 
-## 4. APISIX 怎么知道 user-service
+## 7. APISIX 如何得到后端 Pod
 
 ```text
 HTTPRoute.backendRefs: user-service:80
         ↓
-Controller 读取 Service 和 EndpointSlice
+Ingress Controller 读取 Service 和 EndpointSlice
         ↓
 得到 10.0.1.11:8080、10.0.2.12:8080
         ↓
 生成 APISIX Route 和 Upstream
         ↓
-通过 apisix-admin:9180 写入 APISIX
+写入 Traditional APISIX 或 Hybrid Control Plane
+        ↓
+最终由数据面在 Pod IP 之间负载均衡
 ```
 
-默认使用 Endpoint 粒度时，APISIX 直接在 Pod IP 之间负载均衡，不再请求 `user-service` 的 ClusterIP。服务扩容后，EndpointSlice 变化会触发 Controller 更新 Upstream。
+服务扩容后，EndpointSlice 变化会触发 Controller 更新 Upstream。APISIX 自身也支持
+Kubernetes Service Discovery Plugin；这是 APISIX 数据面主动发现后端的另一条路径，
+不要和 Ingress Controller 转换 EndpointSlice 的过程混在一起。
 
-APISIX 自身也提供 Kubernetes Service Discovery Plugin，由 APISIX 直接监听后端变化；这是另一种服务发现方式，不要与 Controller 的转换链路混淆。
+## 8. Gateway、Service 和 APISIX 监听端口
 
-## 5. Gateway 的 80 端口有什么用
-
-Gateway API 中的 `listeners.port: 80` 表示期望 Gateway 在其地址的 80 端口提供 HTTP Listener。
-
-但 APISIX Controller 不管理数据面部署，不能根据该字段打开 socket 或修改 Service。示例中有三个端口：
-
-| 端口 | 示例 | 实际作用 |
+| 端口 | 示例 | 作用 |
 | --- | --- | --- |
-| `Gateway.listeners.port` | 80 | 声明 Listener，可用于 APISIX Route 的端口匹配 |
+| `Gateway.listeners.port` | 80 | Gateway API 声明的 Listener |
 | `apisix-gateway Service.port` | 80 | Client 实际访问的端口 |
-| `targetPort` / APISIX `node_listen` | 9080 | APISIX 进程实际接受连接的端口 |
+| Service `targetPort` | 9080 | 转发到 APISIX Data Plane |
+| APISIX `node_listen` | 9080 | APISIX 进程实际监听端口 |
+| Admin Service | 9180 | Controller 写配置，不承载业务请求 |
 
-默认 `listener_port_match_mode: off`，Controller 不生成端口匹配条件，所以下面的映射可以工作：
-
-```text
-Client -> 203.0.113.10:80 -> Service:80 -> APISIX Pod:9080
-```
-
-设置为 `auto` 或 `explicit` 后，符合条件的 Route 会包含 `server_port == 80`。如果 APISIX 实际在 9080 接受连接，条件不成立，请求可能返回 `404`。
-
-需要按端口隔离 Route 时，应让 Gateway Listener、Service `port/targetPort` 和 APISIX `node_listen` 使用同一端口。
-
-## 6. 一次请求如何执行
-
-示例地址：
+典型请求路径是：
 
 ```text
-api.example.com              -> 203.0.113.10
-apisix-gateway               -> 203.0.113.10:80
-APISIX Pod                   -> 10.0.3.21:9080
-user-service EndpointSlice   -> 10.0.1.11:8080、10.0.2.12:8080
+Client -> 203.0.113.10:80 -> Service:80 -> APISIX:9080 -> Backend
 ```
 
-客户端执行：
+如果启用 APISIX Controller 的 Listener 端口匹配，应保证 Gateway Listener、Service
+端口映射和 APISIX 实际监听规则一致，否则 Route 可能因为端口条件不匹配而返回 `404`。
 
-```bash
-curl http://api.example.com/users/42
-```
+## 9. Dashboard 与两种模式的关系
 
-请求过程：
+Dashboard 是管理界面，不是第三种 APISIX 部署模式：
 
 ```text
-1. DNS
-   api.example.com -> 203.0.113.10
-
-2. Client 建立连接
-   目标：203.0.113.10:80，即 apisix-gateway 的对外 IP 和端口
-
-3. Kubernetes Service 转发
-   apisix-gateway:80 -> APISIX Pod 10.0.3.21:9080
-
-4. APISIX 处理
-   匹配 Host=api.example.com、Path=/users/42
-   执行认证、限流、改写等插件
-
-5. APISIX 选择 Upstream 并建立连接
-   APISIX Pod -> user Pod 10.0.1.11:8080
+Traditional：Dashboard -> Traditional APISIX Admin API
+Hybrid：     Dashboard -> Control Plane Admin API
 ```
 
-客户端不访问 `GatewayProxy` 或 `apisix-admin`，请求也不经过 Ingress Controller：
+Dashboard 不处理业务请求。在 Hybrid 模式中，它不能连接 Data Plane；生产环境还应限制
+Admin API 只能被 Dashboard、Ingress Controller、CI/CD 和可信管理网络访问。
+
+## 10. 当前 Docker 实验的位置
+
+当前 `deployments/gateway/003_apisix` 使用 Traditional 模式：
 
 ```text
-配置流：Gateway API -> Controller -> apisix-admin:9180 -> APISIX 配置
-请求流：Client -> apisix-gateway:80 -> APISIX Pod:9080 -> user Pod:8080
+Admin API :9180 ─┐
+                 ├─> APISIX -> etcd :2379
+Gateway :8080 ───┘
 ```
 
-## 7. 配置存储与内部抽象
+当前实验使用 Admin API 创建 Route 和 Upstream，还没有接入 Kubernetes Gateway API。
+后续 Kubernetes 实验可以按以下顺序展开：
 
-| 部署模式 | 配置链路 |
-| --- | --- |
-| 传统模式 | Controller -> Admin API -> etcd -> APISIX 数据面 |
-| Standalone API-driven | Controller -> `/apisix/admin/configs` -> APISIX 内存 |
+1. 部署 Traditional APISIX 与 Ingress Controller，验证 Gateway/HTTPRoute；
+2. 将 APISIX 拆分成 Control Plane 与 Data Plane；
+3. 让同一份 Gateway/HTTPRoute 改为写入 Hybrid Control Plane；
+4. 验证 Data Plane 不访问 etcd、没有 Admin API，仍然可以转发业务请求。
 
-两种模式都不会让业务请求经过 Controller 或 etcd。
-
-| APISIX 抽象 | 本例中的作用 |
-| --- | --- |
-| Route | 匹配 `api.example.com/users/*` |
-| Upstream | 保存 user Pod 端点和负载均衡策略 |
-| Plugin | 执行认证、限流、改写和可观测逻辑 |
-| Consumer | 表示 API 调用方及其凭证 |
-| Service | 复用多个 Route 的公共 APISIX 配置 |
-
-最后一项是 APISIX 内部的 Service，不是 Kubernetes Service。
-
-## 8. 总结
+## 11. 总结
 
 ```text
-GatewayClass 选择 Controller
-        ↓
-GatewayProxy 指定 APISIX 管理端点
-        ↓
-Gateway / HTTPRoute 声明 Listener、匹配条件和后端
-        ↓
-Controller 生成 APISIX Route 和 Upstream
-        ↓
-Client 访问预先部署的 apisix-gateway
-        ↓
-APISIX 执行插件并选择后端 Pod
+Traditional / Hybrid
+    决定 APISIX 管理面和数据面如何部署
+
+Gateway API
+    决定入口、路由和后端如何声明
+
+Ingress Controller
+    把 Gateway API 翻译成 APISIX 配置
 ```
+
+Traditional 下 Controller 写入同一组 APISIX；Hybrid 下 Controller 只写 Control Plane，
+业务请求只经过 Data Plane。二者使用相同的 Gateway 和 HTTPRoute 语义。
 
 官方文档：[Deployment Architecture](https://apisix.apache.org/docs/ingress-controller/concepts/deployment-architecture/)、[Gateway API Support](https://apisix.apache.org/docs/ingress-controller/concepts/gateway-api/)、[Configuration Examples](https://apisix.apache.org/docs/ingress-controller/reference/apisix-ingress-controller/examples/)、[Kubernetes Discovery](https://apisix.apache.org/docs/apisix/discovery/kubernetes/)。

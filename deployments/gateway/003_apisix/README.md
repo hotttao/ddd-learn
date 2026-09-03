@@ -1,15 +1,15 @@
 # gateway/003：APISIX 当前实验
 
-## 第 1 步：创建并启动 APISIX 基线
+## 第 2 步：创建 `/v1/xhs` Route 和 Upstream
 
-本步骤基于已提交的 auth/003 基线，将入口替换为 APISIX，并使用 etcd 保存 APISIX
-动态配置。本步骤只启动 APISIX、etcd 和现有认证/业务依赖，暂不创建 APISIX
-Route、Plugin 或 Consumer。
+本步骤基于已提交的 APISIX 基线，通过 Admin API 创建 `/v1/xhs/*` Route 和
+`xhs-api` Upstream。Route 只匹配 `192.168.2.41`、`GET/POST/PUT`，Upstream 使用
+两个 `xhs_service` 实例进行 round-robin，并通过 `/health` 主动健康检查。
 
 ## 当前拓扑
 
 ```text
-APISIX host :8080 → container :9080 ──待配置──> xhs_service :8082
+APISIX host :8080 → container :9080 → xhs-api Upstream → xhs_service / xhs_service_2 :8082
 APISIX Admin :9180 ────────────────────────> APISIX 配置
 etcd :2379 ──────────────────────────────> Route/Upstream/Plugin/Consumer 存储
 ```
@@ -29,15 +29,28 @@ docker compose -f deployments/gateway/003_apisix/docker-compose.yml up -d
 docker compose -f deployments/gateway/003_apisix/docker-compose.yml config --quiet
 ```
 
-检查 APISIX Admin API：
+检查 APISIX Admin API 和动态对象：
 
 ```shell
 curl -H 'X-API-KEY: edd1c657-da07-4c75-bf47-9b6f4a4e8c12' \
   http://192.168.2.41:9180/apisix/admin/routes
 ```
 
-本步骤尚未创建 Route，因此 `8080` 不承担业务转发；Admin API 应能返回空的
-Route 列表或 APISIX 的标准响应。后续步骤通过 Admin API 创建 `/v1/xhs` Route。
+启动时 `apisix-seed` 会幂等写入 Upstream `1` 和 Route `1`；配置实际保存于 etcd，
+不是写入 APISIX 容器本地文件。
+
+验证匹配规则：
+
+```shell
+curl -i http://192.168.2.41:8080/v1/xhs/organizations/G/crawl/contents
+curl -i -X DELETE http://192.168.2.41:8080/v1/xhs/organizations/G/crawl/contents
+curl -i -H 'Host: other.example.com' \
+  http://192.168.2.41:8080/v1/xhs/organizations/G/crawl/contents
+```
+
+第一条请求会到达 `xhs_service` 并因缺少 Internal JWT 返回 `401`；后两条不匹配
+Route，返回 APISIX 的 `404 Route Not Found`。两个 backend 的健康状态可以通过
+停止其中一个容器后查询 Admin API 中的 Upstream 观察。
 
 ## 配置边界
 

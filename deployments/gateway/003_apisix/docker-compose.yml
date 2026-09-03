@@ -138,7 +138,7 @@ services:
       # 教学环境绑定局域网，方便查看 JWKS；生产环境应只允许内部网络访问。
       - "192.168.2.41:4456:4456"
 
-  xhs_service:
+  xhs_service: &xhs_service
     # xhs_service 只通过 APISIX 的 /v1/xhs 前缀对外提供接口。
     build:
       context: ../../..
@@ -159,6 +159,10 @@ services:
       KETO_READ_URL: http://keto:4466
     expose:
       - "8082"
+
+  # 第二个相同的业务实例，用于验证 APISIX Upstream 的负载均衡。
+  xhs_service_2:
+    <<: *xhs_service
 
   mailpit:
     # Mailpit 只用于教学环境接收邮件，不参与生产认证链路。
@@ -198,6 +202,22 @@ services:
       - "192.168.2.41:8080:9080"
       # APISIX Admin API；只用于本地教学配置，不供浏览器直接访问。
       - "192.168.2.41:9180:9180"
+
+  apisix-seed:
+    # 一次性通过 Admin API 创建本步骤的 Upstream 和 Route。
+    image: m.daocloud.io/docker.io/curlimages/curl:8.10.1
+    entrypoint: ["/bin/sh"]
+    command: ["/etc/config/apisix/seed-routes.sh"]
+    depends_on:
+      apisix:
+        condition: service_started
+      xhs_service_2:
+        condition: service_started
+    environment:
+      # 与 apisix/config.yaml 中 deployment.admin.admin_key 保持一致。
+      APISIX_ADMIN_KEY: edd1c657-da07-4c75-bf47-9b6f4a4e8c12
+    volumes:
+      - ./apisix/seed-routes.sh:/etc/config/apisix/seed-routes.sh:ro
 
 volumes:
   # APISIX 实验使用独立 PostgreSQL 数据，避免影响 auth/003。
