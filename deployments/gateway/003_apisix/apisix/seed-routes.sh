@@ -140,4 +140,31 @@ curl -fsS -X PUT "${admin_url}/routes/3" \
     "upstream_id": 3
   }'
 
-echo "APISIX upstreams 1, 2, 3 and routes 1, 2, 3 are ready"
+curl -fsS -X PUT "${admin_url}/consumers/alice" \
+  -H "X-API-KEY: ${admin_key}" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "username": "alice",
+    "plugins": {
+      "key-auth": {
+        "key": "alice-api-key"
+      }
+    }
+  }'
+
+curl -fsS -X PUT "${admin_url}/routes/4" \
+  -H "X-API-KEY: ${admin_key}" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "name": "consumer-demo",
+    "uri": "/consumer-demo/*",
+    "host": "192.168.2.41",
+    "priority": 20,
+    "methods": ["GET", "HEAD"],
+    "plugins": {
+      "key-auth": {}
+    },
+    "upstream_id": 2
+  }'
+
+echo "APISIX consumer alice and route 4 are ready"

@@ -183,3 +183,35 @@ http://192.168.2.41:8080/
 ```shell
 docker compose -f deployments/gateway/003_apisix/docker-compose.yml up -d ui apisix-seed
 ```
+
+## 第 5 步：创建 Consumer 和 Credential
+
+本步骤创建一个独立的 Consumer 测试路由，不改变现有业务 API 的 Oathkeeper 认证：
+
+```text
+Consumer：alice
+Credential：key-auth / alice-api-key
+Route 4：/consumer-demo/* → UI Upstream 2
+```
+
+APISIX 中的关系是：Consumer 表示调用方身份，Credential 保存该调用方使用的认证
+凭证，Route 上的 `key-auth` Plugin 负责读取请求中的 `apikey` Header，并根据 Key
+找到对应 Consumer。没有 Key 或 Key 不存在时，请求在 APISIX 层直接返回 `401`。
+
+验证：
+
+```shell
+# 不带 Key：401
+curl -i http://192.168.2.41:8080/consumer-demo/
+
+# Alice 的 Key：200，并返回 UI 页面
+curl -i -H 'apikey: alice-api-key' \
+  http://192.168.2.41:8080/consumer-demo/
+
+# unknown Key：401
+curl -i -H 'apikey: unknown-key' \
+  http://192.168.2.41:8080/consumer-demo/
+```
+
+这里的 API Key 只用于演示 APISIX Consumer 认证，不代表 Kratos 用户身份，也不参与
+Keto 权限判断。生产环境应使用 Secret 管理 Credential，避免把示例 Key 写入仓库。
