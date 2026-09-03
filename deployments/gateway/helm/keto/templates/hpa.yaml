@@ -1,0 +1,40 @@
+{{- $kubeVersion := .Capabilities.KubeVersion.GitVersion -}}
+{{- $containerResourceAvailable := and (not (empty $kubeVersion)) (semverCompare ">=1.30.0" $kubeVersion) -}}
+{{- $autoscaling := ternary .Values.deployment.autoscaling .Values.autoscaling (not (empty .Values.deployment.autoscaling )) -}}
+
+{{- if and $autoscaling.enabled (not $containerResourceAvailable) }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "keto.fullname" . }}
+  {{- if .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
+  {{- end }}
+  labels:
+    {{- include "keto.labels" . | nindent 4 }}
+spec:
+  {{- with $autoscaling.behavior }}
+  behavior: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "keto.fullname" . }}
+  minReplicas: {{ $autoscaling.minReplicas }}
+  maxReplicas: {{ $autoscaling.maxReplicas }}
+  metrics:
+  {{- with $autoscaling.targetMemory }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        {{- toYaml . | nindent 8 }}
+  {{- end }}
+  {{- with $autoscaling.targetCPU}}
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        {{- toYaml . | nindent 8 }}
+  {{- end }}
+{{- end }}

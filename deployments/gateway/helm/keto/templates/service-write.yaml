@@ -1,0 +1,69 @@
+{{- if .Values.service.write.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "keto.fullname" . }}-write
+  {{- if .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/component: write
+    {{- include "keto.labels" . | nindent 4 }}
+  {{- with .Values.service.write.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.write.type }}
+  {{- if eq .Values.service.write.type "LoadBalancer" }}
+  {{- with .Values.service.write.loadBalancerIP }}
+  loadBalancerIP: {{ . }}
+  {{- end }}
+  {{- end }}
+  {{- if eq .Values.service.write.type "ClusterIP" }}
+  {{- with .Values.service.write.clusterIP }}
+  clusterIP: {{ . }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.service.write.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ .Values.service.write.externalTrafficPolicy }}
+  {{- end }}
+  {{- if .Values.service.write.internalTrafficPolicy }}
+  internalTrafficPolicy: {{ .Values.service.write.internalTrafficPolicy }}
+  {{- end }}
+  ports:
+    - port: {{ .Values.service.write.port }}
+      targetPort: {{ .Values.service.write.name }}
+      protocol: TCP
+      name: {{ .Values.service.write.name }}
+      appProtocol: {{ .Values.service.write.appProtocol }}
+  selector:
+    app.kubernetes.io/name: {{ include "keto.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- if .Values.service.write.headless.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "keto.fullname" . }}-write-headless
+  {{- if .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
+  {{- end }}
+  labels:
+    service.ory.sh/type: headless
+    app.kubernetes.io/component: write
+    {{- include "keto.labels" . | nindent 4 }}
+spec:
+  type: "ClusterIP"
+  clusterIP: "None"
+  ports:
+    - port: {{ .Values.keto.config.serve.write.port }}
+      targetPort: {{ .Values.service.write.name }}
+      protocol: TCP
+      name: {{ .Values.service.write.name }}
+      appProtocol: {{ .Values.service.write.appProtocol }}
+  selector:
+    app.kubernetes.io/name: {{ include "keto.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+{{- end }}

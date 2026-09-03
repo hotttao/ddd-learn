@@ -1,0 +1,20 @@
+{{- if .Values.pdb.enabled -}}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "keto.fullname" . }}
+  {{- if .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "keto.selectorLabels" . | nindent 6 }}
+  {{- with .Values.pdb.spec.maxUnavailable }}
+  maxUnavailable: {{ . }}
+  {{- end }}
+  {{- with .Values.pdb.spec.minAvailable }}
+  minAvailable: {{ . }}
+  {{- end }}
+{{- end -}}

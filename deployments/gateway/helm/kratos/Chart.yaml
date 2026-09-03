@@ -1,0 +1,13 @@
+apiVersion: v2
+# renovate: image=docker.io/oryd/kratos
+appVersion: "v26.2.0"
+description: A ORY Kratos Helm chart for Kubernetes
+name: kratos
+icon: https://raw.githubusercontent.com/ory/docs/master/docs/static/img/logo-kratos.svg
+version: 0.63.0
+type: application
+dependencies:
+  - name: ory-commons
+    version: 0.1.0
+    repository: file://../ory-commons
+    alias: ory

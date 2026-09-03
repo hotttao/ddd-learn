@@ -1,0 +1,238 @@
+{{- $podAnnotations := ternary .Values.deployment.podAnnotations .Values.podAnnotations (not (empty .Values.deployment.podAnnotations )) -}}
+{{- $automountServiceAccountToken := ternary .Values.deployment.automountServiceAccountToken .Values.automountServiceAccountToken (not (empty .Values.deployment.automountServiceAccountToken )) -}}
+{{- $livenessProbe := ternary .Values.deployment.livenessProbe .Values.livenessProbe (not (empty .Values.deployment.livenessProbe )) -}}
+{{- $readinessProbe := ternary .Values.deployment.readinessProbe .Values.readinessProbe (not (empty .Values.deployment.readinessProbe )) -}}
+{{- $autoscaling := ternary .Values.deployment.autoscaling .Values.autoscaling (not (empty .Values.deployment.autoscaling )) -}}
+{{- $resources := ternary .Values.deployment.resources .Values.resources (not (empty .Values.deployment.resources )) -}}
+{{- $extraInitContainers := ternary .Values.deployment.extraInitContainers .Values.extraInitContainers (not (empty .Values.deployment.extraInitContainers )) -}}
+{{- $extraContainers := ternary .Values.deployment.extraContainers .Values.extraContainers (not (empty .Values.deployment.extraContainers )) -}}
+{{- $extraLabels := ternary .Values.deployment.extraLabels .Values.extraLabels (not (empty .Values.deployment.extraLabels )) -}}
+{{- $extraVolumeMounts := ternary .Values.deployment.extraVolumeMounts .Values.extraVolumeMounts (not (empty .Values.deployment.extraVolumeMounts )) -}}
+{{- $extraVolumes := ternary .Values.deployment.extraVolumes .Values.extraVolumes (not (empty .Values.deployment.extraVolumes )) -}}
+{{- $nodeSelector := ternary .Values.deployment.nodeSelector .Values.nodeSelector (not (empty .Values.deployment.nodeSelector )) -}}
+{{- $affinity := ternary .Values.deployment.affinity .Values.affinity (not (empty .Values.deployment.affinity )) -}}
+{{- $tolerations := ternary .Values.deployment.tolerations .Values.tolerations (not (empty .Values.deployment.tolerations )) -}}
+{{- $topologySpreadConstraints := ternary .Values.deployment.topologySpreadConstraints .Values.topologySpreadConstraints (not (empty .Values.deployment.topologySpreadConstraints )) -}}
+{{- include "keto.automigration.typeVerification" . -}}
+{{- $migrationExtraEnv := ternary .Values.deployment.automigration.extraEnv .Values.deployment.extraEnv (not (empty .Values.deployment.automigration.extraEnv )) -}}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "keto.fullname" . }}
+  {{- if .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
+  {{- end }}
+  labels:
+    {{- include "keto.labels" . | nindent 4 }}
+    {{- with $extraLabels }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    {{- with .Values.deployment.annotations }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  minReadySeconds: {{ .Values.deployment.minReadySeconds }}
+{{- if not $autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+{{- end }}
+  revisionHistoryLimit: {{ .Values.deployment.revisionHistoryLimit }}
+  strategy:
+    {{- toYaml .Values.deployment.strategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- include "keto.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- include "keto.annotations.checksum" . | indent 8 -}}
+        {{- with $podAnnotations }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with $.Values.deployment.podMetadata.annotations }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with $.Values.global.podMetadata.annotations }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "keto.selectorLabels" . | nindent 8 }}
+        {{- with $extraLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with $.Values.deployment.podMetadata.labels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with $.Values.global.podMetadata.labels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+      {{- if $extraInitContainers}}
+        {{- tpl $extraInitContainers . | nindent 8 }}
+      {{- end }}
+      {{- if and ( .Values.keto.automigration.enabled ) ( eq .Values.keto.automigration.type "initContainer" ) }}
+        - name: {{ include "keto.fullname" . }}-automigrate
+          image: "{{ .Values.global.imageRegistry | default .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.keto.automigration.customCommand }}
+          command: {{- toYaml .Values.keto.automigration.customCommand | nindent 12 }}
+          {{- else }}
+          command: ["keto"]
+          {{- end }}
+          {{- if .Values.keto.automigration.customArgs }}
+          args: {{- toYaml .Values.keto.automigration.customArgs | nindent 12 }}
+          {{- else }}
+          args: [ "migrate", "up", "-y", "--config", "/etc/config/keto.yaml" ]
+          {{- end }}
+          volumeMounts:
+            - name: {{ include "keto.name" . }}-config-volume
+              mountPath: /etc/config
+              readOnly: true
+          {{- with $extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            {{- if not (empty ( include "keto.dsn" . )) }}
+              {{- if not (include "ory.extraEnvContainsEnvName" (list $migrationExtraEnv "DSN")) }}
+            - name: DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "keto.secretname" . }}
+                  key: dsn
+              {{- end }}
+            {{- end }}
+            {{- if $migrationExtraEnv }}
+              {{- tpl (toYaml $migrationExtraEnv) . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.keto.automigration.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- end }}
+      serviceAccountName: {{ include "keto.serviceAccountName" . }}
+      automountServiceAccountToken: {{ $automountServiceAccountToken }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.deployment.terminationGracePeriodSeconds }}
+      containers:
+        - name: {{ include "keto.name" . }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.global.imageRegistry | default .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: {{- toYaml .Values.keto.command | nindent 12 }}
+          {{- if .Values.keto.customArgs }}
+          args: {{- toYaml .Values.keto.customArgs | nindent 12 }}
+          {{- else }}
+          args:
+            - serve
+            - --config
+            - /etc/config/keto.yaml
+          {{- end }}
+          ports:
+            - name: {{ .Values.service.read.name }}
+              containerPort: {{ .Values.keto.config.serve.read.port }}
+              protocol: TCP
+            - name: {{ .Values.service.write.name }}
+              containerPort: {{ .Values.keto.config.serve.write.port }}
+              protocol: TCP
+            - name: {{ .Values.service.metrics.name }}
+              containerPort: {{ .Values.keto.config.serve.metrics.port }}
+              protocol: TCP
+            {{- with .Values.deployment.extraPorts }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+          lifecycle:
+            {{- toYaml .Values.deployment.lifecycle | nindent 12 }}
+          {{- if .Values.deployment.customLivenessProbe }}
+          livenessProbe:
+            {{- toYaml .Values.deployment.customLivenessProbe | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            {{- if .Values.deployment.customReadinessProbe }} 
+              {{- toYaml .Values.deployment.customReadinessProbe | nindent 12 }}
+            {{- else }}
+            httpGet:
+              path: /health/alive
+              port: {{ .Values.keto.config.serve.write.port }}
+              httpHeaders:
+                - name: Host
+                  value: '127.0.0.1'
+          {{- toYaml $readinessProbe | nindent 12 }}
+          {{- end }}
+          startupProbe:
+            {{- if .Values.deployment.customStartupProbe }} 
+              {{- toYaml .Values.deployment.customStartupProbe | nindent 12 }}
+            {{- else }}
+            httpGet:
+              path: /health/ready
+              port: {{ .Values.keto.config.serve.write.port }}
+              httpHeaders:
+                - name: Host
+                  value: '127.0.0.1'
+            {{- toYaml .Values.deployment.startupProbe | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml $resources | nindent 12 }}
+          env:
+            {{- if not (empty ( include "keto.dsn" . )) }}
+              {{- if not (include "ory.extraEnvContainsEnvName" (list .Values.deployment.extraEnv "DSN")) }}
+            - name: DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "keto.secretname" . }}
+                  key: dsn
+              {{- end }}
+            {{- end }}
+            {{- if .Values.deployment.extraEnv }}
+              {{- tpl (toYaml .Values.deployment.extraEnv) . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: {{ include "keto.name" . }}-config-volume
+              mountPath: /etc/config
+              readOnly: true
+          {{- with $extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- if $extraContainers }}
+          {{- tpl $extraContainers . | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: {{ include "keto.name" . }}-config-volume
+          configMap:
+            name: {{ include "keto.fullname" . }}-config
+      {{- with $extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with $nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.deployment.dnsConfig }}
+      dnsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
