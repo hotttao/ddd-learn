@@ -12,8 +12,7 @@
 4. 配置 JWT 或外部认证 Plugin；先验证独立实验，再决定如何与当前 Oathkeeper 链路组合，不能同时让两个组件重复签发身份。
 5. 创建 `alice` Consumer 和 Credential，验证 Alice 与 unknown consumer 的请求差异。
 6. 将 `xhs_service` 接入 APISIX，验证 Alice/Bob 的 Keto `200/403` 结果不被 Gateway 错误改写。
-7. 使用 Consul Discovery 配置动态 Upstream，比较 APISIX 与 Traefik Consul Catalog 的服务发现模型。
-8. 记录 Route、Plugin、Upstream、Consumer 的职责边界，并完成失败请求和配置变更验证。
+7. 跳过 Consul Discovery 实验。
 
 ## 完成标准
 

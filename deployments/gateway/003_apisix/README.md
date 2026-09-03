@@ -215,3 +215,28 @@ curl -i -H 'apikey: unknown-key' \
 
 这里的 API Key 只用于演示 APISIX Consumer 认证，不代表 Kratos 用户身份，也不参与
 Keto 权限判断。生产环境应使用 Secret 管理 Credential，避免把示例 Key 写入仓库。
+
+## 第 6 步：验证 xhs_service 的业务权限结果
+
+业务 API 继续使用既有链路：
+
+```text
+浏览器携带 Kratos Session Cookie
+  → APISIX forward-auth
+  → Oathkeeper cookie_session + id_token
+  → APISIX 转发 Authorization: Bearer <Internal JWT>
+  → xhs_service JWT 中间件
+  → xhs_service 调用 Keto 判断组织权限
+```
+
+APISIX 只负责路由、外部认证和 JWT Header 转发，不参与组织权限判断。当前组织 G
+的结果为：
+
+| 请求 | Alice | Bob |
+| --- | --- | --- |
+| `GET /v1/xhs/organizations/G/crawl/contents` | `200` | `200` |
+| `POST /v1/xhs/organizations/G/crawl/tasks` | `200` | `200` |
+| `PUT /v1/xhs/organizations/G/crawl/keywords` | `200` | `403` |
+
+因此 Bob 的 `403` 是 `xhs_service` 根据 Keto 返回的业务授权结果，不是 APISIX
+因为路由、Consumer 或外部认证失败而产生的错误。
