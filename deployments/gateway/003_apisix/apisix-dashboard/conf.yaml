@@ -1,0 +1,23 @@
+# APISIX Dashboard 配置；Dashboard 是管理页面，不处理业务请求。
+conf:
+  listen:
+    # Dashboard 容器监听所有网络接口，宿主机通过 Compose 映射到 8081。
+    host: 0.0.0.0
+    # Dashboard Web 服务端口。
+    port: 9000
+  etcd:
+    # Dashboard 读取 APISIX 动态配置的 etcd 地址。
+    endpoints:
+      - http://etcd:2379
+    # 与 APISIX deployment.etcd.prefix 保持一致。
+    prefix: /apisix
+
+authentication:
+  # 用于签署 Dashboard 登录会话的密钥，不是 APISIX Admin API Key。
+  secret: dashboard-local-secret
+  # 登录会话有效期，单位为秒。
+  expire_time: 3600
+  # Dashboard 页面登录用户；仅用于本地教学。
+  users:
+    - username: admin
+      password: admin

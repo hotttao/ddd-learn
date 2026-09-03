@@ -219,6 +219,18 @@ services:
     volumes:
       - ./apisix/seed-routes.sh:/etc/config/apisix/seed-routes.sh:ro
 
+  apisix-dashboard:
+    # Dashboard 读取 etcd 中的 APISIX Route、Upstream 和 Plugin 配置。
+    image: m.daocloud.io/docker.io/apache/apisix-dashboard:3.0.1-alpine
+    depends_on:
+      etcd:
+        condition: service_started
+    volumes:
+      - ./apisix-dashboard/conf.yaml:/usr/local/apisix-dashboard/conf/conf.yaml:ro
+    ports:
+      # Dashboard Web 页面；仅用于局域网教学访问。
+      - "192.168.2.41:8081:9000"
+
 volumes:
   # APISIX 实验使用独立 PostgreSQL 数据，避免影响 auth/003。
   gateway-003-postgres:

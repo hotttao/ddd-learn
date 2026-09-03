@@ -44,6 +44,18 @@ curl -fsS -X PUT "${admin_url}/routes/1" \
     "uri": "/v1/xhs/*",
     "host": "192.168.2.41",
     "methods": ["GET", "POST", "PUT"],
+    "plugins": {
+      "limit-count": {
+        "count": 3,
+        "time_window": 60,
+        "key_type": "var",
+        "key": "remote_addr",
+        "policy": "local",
+        "rejected_code": 429,
+        "rejected_msg": "APISIX route rate limit exceeded",
+        "show_limit_quota_header": true
+      }
+    },
     "upstream_id": 1
   }'
 
