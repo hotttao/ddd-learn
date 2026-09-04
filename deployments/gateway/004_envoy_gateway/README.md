@@ -74,3 +74,52 @@ helm list --namespace ddd-learn
 
 结果：PostgreSQL、Mailpit、Keto、Kratos、Kratos Courier、Oathkeeper 均为 Running/Ready，
 三个 Helm Release 状态为 `deployed`。
+
+## 第 2 步：部署 xhs_service
+
+### 当前配置
+
+- Chart：`deployments/gateway/helm/xhs`；
+- Values：`values/xhs.yaml`；
+- 镜像：`xhs_service:0.0.1`；
+- Service：`xhs-service:80`，转发到 Pod 的 `8082`；
+- Keto 地址：`http://keto-read:80`；
+- Oathkeeper JWKS 地址：`http://oathkeeper-api:4456/.well-known/jwks.json`；
+- 健康检查：`GET /health`。
+
+### 构建并导入镜像
+
+当前 k3s 节点使用 containerd，Docker 构建出的镜像需要手动导入：
+
+```shell
+docker build -f xhs_service/Dockerfile -t xhs_service:0.0.1 .
+docker save -o /tmp/xhs_service-0.0.1.tar xhs_service:0.0.1
+sudo k3s ctr images import /tmp/xhs_service-0.0.1.tar
+```
+
+### Helm 部署
+
+```shell
+helm upgrade --install xhs deployments/gateway/helm/xhs \
+  --namespace ddd-learn \
+  --values deployments/gateway/004_envoy_gateway/values/xhs.yaml \
+  --wait --timeout 180s
+```
+
+### 当前验证
+
+```shell
+kubectl -n ddd-learn get deploy,pod,svc,endpointslice \
+  -l app.kubernetes.io/instance=xhs -o wide
+kubectl -n ddd-learn wait --for=condition=Available \
+  deployment/xhs-service --timeout=120s
+```
+
+当前结果：
+
+```text
+xhs-service Pod       Running 1/1
+xhs-service Service   ClusterIP:80
+EndpointSlice          指向 Pod:8082
+GET /health            200 {"status":"ok"}
+```
