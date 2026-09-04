@@ -27,8 +27,8 @@ kratos:
     identity:
       default_schema_id: default
       schemas:
-      - id: default
-        url: file:///etc/config/default
+        - id: default
+          url: file:///etc/config/default
 
     serve:
       public:
@@ -58,13 +58,19 @@ kratos:
         login:
           ui_url: http://192.168.2.41:30425/login
           lifespan: 10m
+          after:
+            password:
+              hooks:
+                # 密码正确后仍要求邮箱已经验证；未验证时进入 Verification Flow。
+                - hook: require_verified_address
         registration:
           ui_url: http://192.168.2.41:30425/registration
           lifespan: 10m
           after:
             password:
               hooks:
-                - hook: session
+                # 注册成功后展示验证码页面，不直接创建登录 Session。
+                - hook: show_verification_ui
         logout:
           after:
             default_browser_return_url: http://192.168.2.41:30425/login
@@ -82,6 +88,8 @@ kratos:
           enabled: true
           ui_url: http://192.168.2.41:30425/verification
           use: code
+          after:
+            default_browser_return_url: http://192.168.2.41:30425/login
     session:
       lifespan: 24h
     secrets:

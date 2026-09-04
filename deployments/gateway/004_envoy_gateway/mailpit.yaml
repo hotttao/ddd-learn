@@ -16,6 +16,10 @@ spec:
       containers:
         - name: mailpit
           image: axllent/mailpit:v1.27.8
+          args:
+            # 让页面、静态资源和 API 都位于 Envoy 的 /mailpit 前缀下。
+            - --webroot
+            - /mailpit/
           ports:
             - name: smtp
               containerPort: 1025
@@ -23,11 +27,11 @@ spec:
               containerPort: 8025
           readinessProbe:
             httpGet:
-              path: /
+              path: /mailpit/
               port: http
           livenessProbe:
             httpGet:
-              path: /
+              path: /mailpit/
               port: http
 ---
 apiVersion: v1

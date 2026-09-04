@@ -506,3 +506,79 @@ GET /kratos/self-service/login/browser         303 → /login?flow=...
 
 此时静态页面和 Kratos Browser Flow 已共享同一个浏览器 Origin，因此前端调用 `/kratos`
 不依赖 Vite 开发代理，也不需要跨域传递 Kratos Session Cookie。
+
+## 第 4 步第 3 个功能点：强制邮箱验证
+
+### Kratos Hook
+
+`values/kratos.yaml` 使用当前 Kratos `v26.2.0` 支持的 Hook 组合：
+
+```text
+密码注册成功
+  → show_verification_ui
+  → 不创建 Session
+  → /verification?flow=<id>
+
+密码登录成功
+  → require_verified_address
+  → 未验证：拒绝创建 Session，并进入 Verification Flow
+  → 已验证：创建 Session
+```
+
+注册流程不再使用 `session` Hook，避免未验证邮箱的用户注册后直接登录。Verification Flow
+完成后回到 `/login`，由用户使用已验证身份登录。
+
+### Verification 页面
+
+UI 新增 `VerificationFlowPage` 和 `/verification` 路由。页面从 URL 读取 `flow`，通过
+Kratos Frontend SDK 加载 `VerificationFlow`，并交给 Ory Elements 的 `Verification`
+组件渲染。验证码生成、过期、重发和校验仍全部由 Kratos 负责，UI 不保存验证状态。
+
+更新 UI 镜像：
+
+```shell
+docker build -t ui_example:0.0.1 ui_example
+docker save -o /tmp/ui_example-0.0.1.tar ui_example:0.0.1
+sudo k3s ctr images import /tmp/ui_example-0.0.1.tar
+kubectl -n ddd-learn rollout restart deployment/ui-example
+```
+
+同一标签重新构建后，必须重新导入并重启 Pod；否则运行中的 Pod 仍使用旧 image ID。
+
+### 通过 Envoy 访问 Mailpit
+
+Mailpit 使用 `--webroot /mailpit/`，使 Web 页面、静态资源和 API 都位于同一个路径前缀。
+`mailpit-route.yaml` 将该前缀转发到 `Service/mailpit:8025`：
+
+```text
+http://192.168.2.41:30425/mailpit/
+  → HTTPRoute/mailpit
+  → Service/mailpit:8025
+  → Mailpit Pod
+```
+
+SMTP `mailpit:1025` 仍然只供 Kratos 在集群内部发送邮件。公开 Mailpit 只适用于教学环境；
+生产环境不得暴露测试邮箱，也不应使用 Mailpit 接收真实用户邮件。
+
+```shell
+kubectl apply -f deployments/gateway/004_envoy_gateway/mailpit.yaml
+kubectl apply -f deployments/gateway/004_envoy_gateway/mailpit-route.yaml
+```
+
+### 验证结果
+
+使用两个临时 Identity 验证后已将其删除，结果如下：
+
+```text
+注册结果                         session=false
+注册后的 continue_with          show_verification_ui
+Verification UI                 /verification?flow=... → 200
+Mailpit 验证邮件                 包含 6 位验证码
+验证码提交结果                   state=passed_challenge
+已验证账号登录                   active Session
+未验证账号登录                   session_verified_address_required
+未验证账号的 continue_with       show_verification_ui
+```
+
+因此不能通过跳过注册后的验证码页面绕过限制：未验证用户之后再次登录时，
+`require_verified_address` 仍会阻止 Session 签发。

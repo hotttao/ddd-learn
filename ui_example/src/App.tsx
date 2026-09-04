@@ -6,6 +6,7 @@ import AccountSettingsPage from "@/pages/auth/AccountSettingsPage";
 import AuthFlowPage from "@/pages/auth/AuthFlowPage";
 import RecoveryFlowPage from "@/pages/auth/RecoveryFlowPage";
 import SessionPage from "@/pages/auth/SessionPage";
+import VerificationFlowPage from "@/pages/auth/VerificationFlowPage";
 import XhsConsolePage from "@/pages/xhs/console";
 
 function AuthNavigation() {
@@ -66,6 +67,7 @@ export default function App() {
             element={<AuthFlowPage kind="registration" />}
           />
           <Route path="/recovery" element={<RecoveryFlowPage />} />
+          <Route path="/verification" element={<VerificationFlowPage />} />
           <Route path="/settings" element={<AccountSettingsPage />} />
           <Route path="/xhs" element={<XhsConsolePage />} />
           <Route path="*" element={<SessionPage />} />
