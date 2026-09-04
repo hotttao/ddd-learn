@@ -1,0 +1,330 @@
+# Envoy Gateway 实验的开发数据初始化。
+#
+# 这些资源只负责向已经部署好的 Kratos/Keto 写入教学数据：
+# - Secret 保存两个演示账号的密码；
+# - kratos-seed 创建或更新 Alice、Bob；
+# - keto-seed 根据 Kratos identity.id 写入组织 G 的关系。
+#
+# Oathkeeper 没有需要初始化的业务数据，它的规则由 values/oathkeeper.yaml 管理。
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ory-seed-credentials
+  namespace: ddd-learn
+type: Opaque
+stringData:
+  # 仅用于本地教学环境，生产环境不能把初始密码提交到仓库。
+  ALICE_PASSWORD: Alice-password-2026
+  BOB_PASSWORD: Bob-password-2026
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kratos-seed-script
+  namespace: ddd-learn
+data:
+  seed-identities.sh: |
+    #!/bin/sh
+    # This is development data only. Production identities must be provisioned
+    # by an authenticated management workflow.
+    set -eu
+
+    admin_url="${KRATOS_ADMIN_URL:-http://kratos-admin:80}"
+    alice_email="${ALICE_EMAIL:-alice@example.com}"
+    alice_password="${ALICE_PASSWORD:?ALICE_PASSWORD is required}"
+    bob_email="${BOB_EMAIL:-bob@example.com}"
+    bob_password="${BOB_PASSWORD:?BOB_PASSWORD is required}"
+
+    wait_for_kratos() {
+      echo "Waiting for Kratos Admin API at ${admin_url}..."
+      while ! curl -fsS "${admin_url}/health/ready" >/dev/null; do
+        sleep 1
+      done
+    }
+
+    email_query() {
+      printf '%s' "$1" | sed 's/%/%25/g; s/@/%40/g'
+    }
+
+    identity_id() {
+      email=$1
+      response=$(curl -fsS "${admin_url}/admin/identities?credentials_identifier=$(email_query "$email")")
+      printf '%s' "$response" \
+        | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' \
+        | head -n 1 \
+        | sed 's/.*"id"[[:space:]]*:[[:space:]]*"//; s/"$//'
+    }
+
+    identity_payload() {
+      name=$1
+      email=$2
+      role=$3
+      include_password=$4
+
+      if [ "$include_password" = "true" ]; then
+        cat <<EOF
+    {
+      "schema_id": "default",
+      "traits": {
+        "email": "${email}",
+        "name": {"first": "${name}"}
+      },
+      "metadata_admin": {
+        "organization_id": "G",
+        "role": "${role}"
+      },
+      "verifiable_addresses": [{
+        "value": "${email}",
+        "via": "email",
+        "status": "completed",
+        "verified": true
+      }],
+      "credentials": {
+        "password": {
+          "config": {"password": "${PASSWORD}"}
+        }
+      }
+    }
+    EOF
+      else
+        cat <<EOF
+    {
+      "schema_id": "default",
+      "state": "active",
+      "traits": {
+        "email": "${email}",
+        "name": {"first": "${name}"}
+      },
+      "metadata_admin": {
+        "organization_id": "G",
+        "role": "${role}"
+      },
+      "verifiable_addresses": [{
+        "value": "${email}",
+        "via": "email",
+        "status": "completed",
+        "verified": true
+      }]
+    }
+    EOF
+      fi
+    }
+
+    create_or_update_identity() {
+      name=$1
+      email=$2
+      password=$3
+      role=$4
+      existing_id=$(identity_id "$email" || true)
+
+      if [ -n "$existing_id" ]; then
+        echo "Updating seeded identity: ${email} (${existing_id})"
+        PASSWORD="$password" identity_payload "$name" "$email" "$role" false \
+          | curl -fsS -X PUT \
+              -H 'Content-Type: application/json' \
+              --data-binary @- \
+              "${admin_url}/admin/identities/${existing_id}" >/dev/null
+        return
+      fi
+
+      echo "Creating seeded identity: ${email}"
+      PASSWORD="$password" identity_payload "$name" "$email" "$role" true \
+        | curl -fsS -X POST \
+            -H 'Content-Type: application/json' \
+            --data-binary @- \
+            "${admin_url}/admin/identities" >/dev/null
+    }
+
+    wait_for_kratos
+    create_or_update_identity "Alice" "$alice_email" "$alice_password" "admin"
+    create_or_update_identity "Bob" "$bob_email" "$bob_password" "member"
+    echo "Kratos seed completed."
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kratos-seed
+  namespace: ddd-learn
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kratos-seed
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: kratos-seed
+          image: m.daocloud.io/docker.io/curlimages/curl:8.10.1
+          command: ["/bin/sh", "/seed/seed-identities.sh"]
+          env:
+            - name: ALICE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ory-seed-credentials
+                  key: ALICE_PASSWORD
+            - name: BOB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ory-seed-credentials
+                  key: BOB_PASSWORD
+          volumeMounts:
+            - name: seed-script
+              mountPath: /seed
+              readOnly: true
+      volumes:
+        - name: seed-script
+          configMap:
+            name: kratos-seed-script
+            defaultMode: 0555
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keto-seed-script
+  namespace: ddd-learn
+data:
+  seed-relations.sh: |
+    #!/bin/sh
+    # This is development data only. Production relationship changes must go
+    # through an authenticated management workflow.
+    set -eu
+
+    kratos_admin_url="${KRATOS_ADMIN_URL:-http://kratos-admin:80}"
+    keto_write_url="${KETO_WRITE_URL:-http://keto-write:80}"
+    alice_email="${ALICE_EMAIL:-alice@example.com}"
+    bob_email="${BOB_EMAIL:-bob@example.com}"
+    organization_id="${ORGANIZATION_ID:-G}"
+
+    wait_for_url() {
+      url=$1
+      echo "Waiting for ${url}..."
+      while ! curl -fsS "$url" >/dev/null; do
+        sleep 1
+      done
+    }
+
+    email_query() {
+      printf '%s' "$1" | sed 's/%/%25/g; s/@/%40/g'
+    }
+
+    identity_id() {
+      email=$1
+      response=$(curl -fsS "${kratos_admin_url}/admin/identities?credentials_identifier=$(email_query "$email")")
+      id=$(printf '%s' "$response" \
+        | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' \
+        | head -n 1 \
+        | sed 's/.*"id"[[:space:]]*:[[:space:]]*"//; s/"$//')
+      if [ -z "$id" ]; then
+        echo "Unable to find Kratos identity: ${email}" >&2
+        exit 1
+      fi
+      printf '%s' "$id"
+    }
+
+    write_payload() {
+      payload=$1
+      description=$2
+      status=$(curl -sS -o /dev/null -w '%{http_code}' \
+        -X PUT "${keto_write_url}/admin/relation-tuples" \
+        -H 'Content-Type: application/json' \
+        --data "$payload")
+      case "$status" in
+        2??|409)
+          echo "Keto tuple ready: ${description} (HTTP ${status})"
+          ;;
+        *)
+          echo "Unable to write Keto tuple (HTTP ${status}): ${payload}" >&2
+          exit 1
+          ;;
+      esac
+    }
+
+    write_user_tuple() {
+      relation=$1
+      subject_id=$2
+      payload=$(cat <<EOF
+    {
+      "namespace": "Organization",
+      "object": "${organization_id}",
+      "relation": "${relation}",
+      "subject_id": "User:${subject_id}"
+    }
+    EOF
+      )
+      write_payload "$payload" "Organization:${organization_id}#${relation}@User:${subject_id}"
+    }
+
+    write_subject_set_tuple() {
+      relation=$1
+      subject_relation=$2
+      payload=$(cat <<EOF
+    {
+      "namespace": "Organization",
+      "object": "${organization_id}",
+      "relation": "${relation}",
+      "subject_set": {
+        "namespace": "Organization",
+        "object": "${organization_id}",
+        "relation": "${subject_relation}"
+      }
+    }
+    EOF
+      )
+      write_payload "${payload}" "Organization:${organization_id}#${relation}@Organization:${organization_id}#${subject_relation}"
+    }
+
+    wait_for_url "${kratos_admin_url}/health/ready"
+    wait_for_url "${keto_write_url}/health/ready"
+
+    alice_id=$(identity_id "$alice_email")
+    bob_id=$(identity_id "$bob_email")
+
+    # Organization G has Alice as administrator and Bob as ordinary member.
+    write_user_tuple admins "$alice_id"
+    write_user_tuple members "$bob_id"
+
+    # These relations describe the operation ceiling of organization G.
+    for role in members admins; do
+      write_subject_set_tuple entitled_start_crawl "$role"
+      write_subject_set_tuple entitled_view_content "$role"
+      write_subject_set_tuple entitled_modify_keywords "$role"
+    done
+
+    # Both roles may start crawls and view content.
+    for role in members admins; do
+      write_subject_set_tuple granted_start_crawl "$role"
+      write_subject_set_tuple granted_view_content "$role"
+    done
+
+    # Only administrators may modify crawl keywords.
+    write_subject_set_tuple granted_modify_keywords admins
+
+    echo "Keto relationship seed completed."
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keto-seed
+  namespace: ddd-learn
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keto-seed
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: keto-seed
+          image: m.daocloud.io/docker.io/curlimages/curl:8.10.1
+          command: ["/bin/sh", "/seed/seed-relations.sh"]
+          volumeMounts:
+            - name: seed-script
+              mountPath: /seed
+              readOnly: true
+      volumes:
+        - name: seed-script
+          configMap:
+            name: keto-seed-script
+            defaultMode: 0555
