@@ -1,0 +1,19 @@
+# Envoy Gateway 控制面 values；安装到 ddd-learn namespace。
+# Gateway API CRD 已由当前 k3s 集群提供，因此不重复安装。
+crds:
+  enabled: false
+
+createNamespace: false
+namespaceOverride: ddd-learn
+
+global:
+  images:
+    envoyGateway:
+      image: m.daocloud.io/docker.io/envoyproxy/gateway:v1.6.1
+      pullPolicy: IfNotPresent
+
+deployment:
+  replicas: 1
+
+service:
+  type: ClusterIP
