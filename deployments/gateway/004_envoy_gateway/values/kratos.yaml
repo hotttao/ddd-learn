@@ -25,8 +25,9 @@ kratos:
     identity:
       default_schema_id: default
       schemas:
-        - id: default
-          url: file:///etc/config/default
+      - id: default
+        url: file:///etc/config/default
+
     serve:
       public:
         host: 0.0.0.0
@@ -103,3 +104,6 @@ service:
   public:
     type: ClusterIP
     port: 80
+
+serviceMonitor:
+  enabled: true

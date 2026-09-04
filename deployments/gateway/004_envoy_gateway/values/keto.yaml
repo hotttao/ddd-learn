@@ -37,6 +37,11 @@ service:
   write:
     headless:
       enabled: false
+  metrics:
+    enabled: true
+
+serviceMonitor:
+  enabled: true
 
 deployment:
   extraVolumes:
