@@ -15,7 +15,9 @@ ingress:
     enabled: false
 
 kratos:
-  development: false
+  # 当前局域网实验使用 HTTP；开发模式允许浏览器通过 HTTP 携带 Kratos Cookie。
+  # 生产环境应关闭该选项，并在 Gateway Listener 上配置 HTTPS。
+  development: true
   automigration:
     enabled: true
     type: job
@@ -32,19 +34,19 @@ kratos:
       public:
         host: 0.0.0.0
         port: 4433
-        base_url: http://192.168.2.41/kratos/
+        base_url: http://192.168.2.41:30425/kratos/
         cors:
           enabled: true
           allowed_origins:
-            - http://192.168.2.41
+            - http://192.168.2.41:30425
       admin:
         host: 0.0.0.0
         port: 4434
         base_url: http://kratos-admin:80/
     selfservice:
-      default_browser_return_url: http://192.168.2.41/
+      default_browser_return_url: http://192.168.2.41:30425/
       allowed_return_urls:
-        - http://192.168.2.41/
+        - http://192.168.2.41:30425/
       methods:
         password:
           enabled: true
@@ -52,12 +54,12 @@ kratos:
           enabled: true
       flows:
         error:
-          ui_url: http://192.168.2.41/error
+          ui_url: http://192.168.2.41:30425/error
         login:
-          ui_url: http://192.168.2.41/login
+          ui_url: http://192.168.2.41:30425/login
           lifespan: 10m
         registration:
-          ui_url: http://192.168.2.41/registration
+          ui_url: http://192.168.2.41:30425/registration
           lifespan: 10m
           after:
             password:
@@ -65,20 +67,20 @@ kratos:
                 - hook: session
         logout:
           after:
-            default_browser_return_url: http://192.168.2.41/login
+            default_browser_return_url: http://192.168.2.41:30425/login
         recovery:
           enabled: true
-          ui_url: http://192.168.2.41/recovery
+          ui_url: http://192.168.2.41:30425/recovery
           use: code
         settings:
-          ui_url: http://192.168.2.41/settings
+          ui_url: http://192.168.2.41:30425/settings
           privileged_session_max_age: 15m
           after:
             password:
-              default_browser_return_url: http://192.168.2.41/
+              default_browser_return_url: http://192.168.2.41:30425/
         verification:
           enabled: true
-          ui_url: http://192.168.2.41/verification
+          ui_url: http://192.168.2.41:30425/verification
           use: code
     session:
       lifespan: 24h

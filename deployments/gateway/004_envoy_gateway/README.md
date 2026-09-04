@@ -433,3 +433,76 @@ server: hertz
 返回响应的服务器是 Hertz，说明请求已经经过 Envoy 和 HTTPRoute 到达 `xhs_service`。
 `401` 不是路由失败：当前功能点只建立业务路由，还没有配置 Envoy 调用 Oathkeeper
 Decision API 将 Kratos Session 转换为 Internal JWT。认证链路将在独立功能点接入。
+
+## 第 4 步第 2 个功能点：接入 UI 和 Kratos Public API
+
+### 部署 UI
+
+`ui.yaml` 使用已有的 `ui_example:0.0.1` Nginx 静态文件镜像创建：
+
+- `Deployment/ui-example`：运行一个 UI Pod，使用 `/health` 进行存活和就绪检查；
+- `Service/ui-example`：提供集群内 `ClusterIP:80`，不直接暴露节点端口。
+
+Docker 本地镜像需要先导入 k3s 使用的 containerd：
+
+```shell
+docker save -o /tmp/ui_example-0.0.1.tar ui_example:0.0.1
+sudo k3s ctr images import /tmp/ui_example-0.0.1.tar
+kubectl apply -f deployments/gateway/004_envoy_gateway/ui.yaml
+```
+
+### 浏览器路由
+
+`browser-routes.yaml` 创建两条 HTTPRoute：
+
+```text
+/kratos/* → 去除 /kratos 前缀 → kratos-public:80
+/*         → ui-example:80
+```
+
+`/` 是 UI 的兜底前缀；Gateway API 会优先选择更长、更具体的 `/kratos` 和 `/v1/xhs`
+匹配，因此 Kratos API 与业务 API 不会进入 UI。Kratos 自身只识别
+`/self-service/*`、`/sessions/*` 等路径，所以路由使用 `URLRewrite` 的
+`ReplacePrefixMatch` 去除浏览器侧的 `/kratos` 前缀。
+
+```shell
+kubectl apply -f deployments/gateway/004_envoy_gateway/browser-routes.yaml
+kubectl -n ddd-learn get httproute kratos-public ui-example -o yaml
+```
+
+### Kratos 浏览器地址
+
+`values/kratos.yaml` 中的 Public `base_url`、UI URL、默认回跳地址、允许回跳地址和 CORS
+来源统一改为 Envoy 入口：
+
+```text
+http://192.168.2.41:30425
+```
+
+当前实验没有配置 HTTPS，因此启用 `kratos.development`，允许浏览器在 HTTP 请求中使用
+Kratos Cookie。生产环境不能沿用该设置，应关闭开发模式并在 Gateway Listener 配置
+HTTPS。
+
+更新 Kratos：
+
+```shell
+helm upgrade --install kratos deployments/gateway/helm/kratos \
+  --namespace ddd-learn \
+  --values deployments/gateway/004_envoy_gateway/values/kratos.yaml \
+  --set-file kratos.identitySchemas.default=deployments/auth/003_keto/kratos/identity.schema.json
+```
+
+### 验证结果
+
+```text
+Deployment/ui-example                         Available 1/1
+HTTPRoute/ui-example                          Accepted=True, ResolvedRefs=True
+HTTPRoute/kratos-public                       Accepted=True, ResolvedRefs=True
+GET http://192.168.2.41:30425/                 200
+GET /kratos/health/ready                       200
+GET /kratos/self-service/login/browser         303 → /login?flow=...
+最终 UI 登录页面                               200
+```
+
+此时静态页面和 Kratos Browser Flow 已共享同一个浏览器 Origin，因此前端调用 `/kratos`
+不依赖 Vite 开发代理，也不需要跨域传递 Kratos Session Cookie。
