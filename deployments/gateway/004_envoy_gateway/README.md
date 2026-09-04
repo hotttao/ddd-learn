@@ -707,3 +707,79 @@ HTTPRoute                   Accepted=True, ResolvedRefs=True
 变化链路是：Deployment 重建 Pod → Pod 通过 Readiness 探针 → EndpointSlice 更新地址 →
 Envoy Gateway 观察 Service/EndpointSlice 变化并更新数据面路由。Gateway、HTTPRoute 和
 Service 本身不需要修改。
+
+## 第 7 步：为 xhs_service 增加 Local RateLimit
+
+本步骤参考 Traefik Docker 实验中的 `ui-rate-limit`，但把限流目标改为当前的
+`HTTPRoute/xhs-service`。配置文件为 `xhs-rate-limit.yaml`，使用 Envoy Gateway
+`BackendTrafficPolicy` 的 Local Rate Limit：
+
+```yaml
+rateLimit:
+  local:
+    rules:
+      - limit:
+          requests: 5
+          unit: Second
+```
+
+这表示每个 Envoy 数据面实例对该路由按每秒 5 个请求限制，超限时由 Gateway 返回
+`429 Too Many Requests`，请求不会到达 `xhs_service`。
+
+### 与 Traefik 配置的区别
+
+Traefik 实验使用：
+
+```yaml
+average: 5
+burst: 2
+```
+
+其中 `average` 表示平均速率，`burst` 显式表示允许的突发容量。当前 Envoy Gateway
+`BackendTrafficPolicy` 的 Local Rate Limit 字段只有 `requests` 和 `unit`，没有独立的
+`burst` 字段，因此本实验只能表达“每秒 5 个请求”，不能把它宣称为与 Traefik 的
+`average=5、burst=2` 完全等价。
+
+### 创建和验证
+
+```shell
+kubectl apply \
+  -f deployments/gateway/004_envoy_gateway/xhs-rate-limit.yaml
+kubectl -n ddd-learn get backendtrafficpolicy \
+  xhs-local-rate-limit -o yaml
+```
+
+Policy 状态为：
+
+```text
+Accepted=True
+ancestor: Gateway/public-gateway, sectionName=http
+```
+
+未登录请求会先经过 Oathkeeper：
+
+```shell
+curl -i http://192.168.2.41:30425/v1/xhs/me/organizations
+```
+
+结果为 `401 Unauthorized`。携带有效 Alice 浏览器 Session 后连续请求：
+
+```shell
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  curl -sS -o /dev/null -w "%{http_code} " \
+    -b /path/to/alice-cookies.txt \
+    http://192.168.2.41:30425/v1/xhs/me/organizations
+done
+echo
+```
+
+本次结果：
+
+```text
+200 200 200 200 200 429 429 200 429 429
+```
+
+之后出现 `200` 是令牌桶随时间补充容量的结果，不表示限流失效。当前只有一个 Envoy
+数据面实例，所以计数器也只有一份；如果扩展多个 Gateway Pod，每个 Pod 的 Local Rate
+Limit 计数器彼此独立。需要集群范围共享配额时，应使用 Global Rate Limit Service，不能
+把 Local Rate Limit 当成全局限流。

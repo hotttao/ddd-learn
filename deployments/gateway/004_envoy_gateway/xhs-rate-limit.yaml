@@ -1,0 +1,19 @@
+# 仅限制 xhs_service 的 HTTPRoute，不影响 UI、Kratos 和 Mailpit。
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: xhs-local-rate-limit
+  namespace: ddd-learn
+spec:
+  # Policy 与 HTTPRoute 位于同一个 namespace，直接绑定当前 xhs 路由。
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: xhs-service
+  rateLimit:
+    local:
+      rules:
+        - limit:
+            # 对应 Traefik rateLimit.average=5 的每秒请求额度。
+            requests: 5
+            unit: Second
