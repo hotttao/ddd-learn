@@ -1,0 +1,17 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: xhs-service
+  namespace: ddd-learn
+spec:
+  parentRefs:
+    - name: public-gateway
+      sectionName: http
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /v1/xhs
+      backendRefs:
+        - name: xhs-service
+          port: 80

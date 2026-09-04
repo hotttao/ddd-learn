@@ -388,3 +388,48 @@ Pod 在节点上声明与 Service 相同的 `hostPort`。集群自带 Traefik �
 端口；冲突发生在单个节点共享的 hostPort 空间。`ss -tnlp` 只显示进程创建的监听 socket，
 不会完整表示 Kubernetes 调度器记录的 Pod hostPort 资源占用。将 Envoy Service 改为
 `NodePort` 后，不再创建 Envoy 的 ServiceLB Pod，也不再申请节点的 80 端口。
+
+## 第 4 步第 1 个功能点：使用 HTTPRoute 接入 xhs_service
+
+`xhs-route.yaml` 创建 `HTTPRoute/xhs-service`，挂载到
+`Gateway/public-gateway` 的 `http` Listener：
+
+```text
+PathPrefix /v1/xhs
+        ↓
+Service/xhs-service:80
+        ↓
+xhs_service Pod:8082
+```
+
+这里没有改写路径。浏览器请求的 `/v1/xhs/...` 会原样传递给 `xhs_service`，与 Hertz
+注册的 API 前缀保持一致。
+
+### 创建和验证
+
+```shell
+kubectl apply -f deployments/gateway/004_envoy_gateway/xhs-route.yaml
+kubectl -n ddd-learn get httproute xhs-service -o yaml
+
+curl -i \
+  http://192.168.2.41:30425/v1/xhs/me/organizations
+```
+
+HTTPRoute 当前状态：
+
+```text
+Accepted=True      Envoy Gateway 已接受该路由
+ResolvedRefs=True  Gateway、Listener 和后端 Service 引用均有效
+```
+
+未携带 Internal JWT 的请求当前返回：
+
+```text
+HTTP/1.1 401 Unauthorized
+server: hertz
+{"error":{"code":"invalid_internal_token","message":"authentication required"}}
+```
+
+返回响应的服务器是 Hertz，说明请求已经经过 Envoy 和 HTTPRoute 到达 `xhs_service`。
+`401` 不是路由失败：当前功能点只建立业务路由，还没有配置 Envoy 调用 Oathkeeper
+Decision API 将 Kratos Session 转换为 Internal JWT。认证链路将在独立功能点接入。
