@@ -1,0 +1,119 @@
+# Istio Ambient 实验的 Kratos values；通过 helm -n ddd-learn 部署。
+fullnameOverride: kratos
+replicaCount: 1
+
+image:
+  registry: ghcr.io
+  repository: hotttao/ory-kratos
+  tag: v26.2.0
+  pullPolicy: IfNotPresent
+
+ingress:
+  admin:
+    enabled: false
+  public:
+    enabled: false
+
+kratos:
+  # 当前局域网实验使用 HTTP；开发模式允许浏览器通过 HTTP 携带 Kratos Cookie。
+  # 生产环境应关闭该选项，并在 Gateway Listener 上配置 HTTPS。
+  development: true
+  automigration:
+    enabled: true
+    type: job
+  identitySchemas: {}
+  config:
+    dsn: postgres://ory:ory@ddd-learn-postgres-rw:5432/ory?sslmode=disable
+    identity:
+      default_schema_id: default
+      schemas:
+        - id: default
+          url: file:///etc/config/default
+
+    serve:
+      public:
+        host: 0.0.0.0
+        port: 4433
+        base_url: http://192.168.2.41:30425/kratos/
+        cors:
+          enabled: true
+          allowed_origins:
+            - http://192.168.2.41:30425
+      admin:
+        host: 0.0.0.0
+        port: 4434
+        base_url: http://kratos-admin:80/
+    selfservice:
+      default_browser_return_url: http://192.168.2.41:30425/
+      allowed_return_urls:
+        - http://192.168.2.41:30425/
+      methods:
+        password:
+          enabled: true
+        code:
+          enabled: true
+      flows:
+        error:
+          ui_url: http://192.168.2.41:30425/error
+        login:
+          ui_url: http://192.168.2.41:30425/login
+          lifespan: 10m
+          after:
+            password:
+              hooks:
+                # 密码正确后仍要求邮箱已经验证；未验证时进入 Verification Flow。
+                - hook: require_verified_address
+        registration:
+          ui_url: http://192.168.2.41:30425/registration
+          lifespan: 10m
+          after:
+            password:
+              hooks:
+                # 注册成功后展示验证码页面，不直接创建登录 Session。
+                - hook: show_verification_ui
+        logout:
+          after:
+            default_browser_return_url: http://192.168.2.41:30425/login
+        recovery:
+          enabled: true
+          ui_url: http://192.168.2.41:30425/recovery
+          use: code
+        settings:
+          ui_url: http://192.168.2.41:30425/settings
+          privileged_session_max_age: 15m
+          after:
+            password:
+              default_browser_return_url: http://192.168.2.41:30425/
+        verification:
+          enabled: true
+          ui_url: http://192.168.2.41:30425/verification
+          use: code
+          after:
+            default_browser_return_url: http://192.168.2.41:30425/login
+    session:
+      lifespan: 24h
+    secrets:
+      cookie:
+        - PLEASE-CHANGE-ME-envoy-gateway-cookie
+      cipher:
+        - 32-LONG-SECRET-NOT-SECURE-AT-ALL
+    ciphers:
+      algorithm: xchacha20-poly1305
+    hashers:
+      algorithm: bcrypt
+      bcrypt:
+        cost: 8
+    courier:
+      smtp:
+        connection_uri: smtp://mailpit:1025/?disable_starttls=true
+
+service:
+  admin:
+    type: ClusterIP
+    port: 80
+  public:
+    type: ClusterIP
+    port: 80
+
+serviceMonitor:
+  enabled: true
