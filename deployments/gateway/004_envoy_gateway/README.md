@@ -655,3 +655,55 @@ GET /v1/xhs/me/organizations   200 {}
 
 测试身份没有 Keto 组织关系，所以接口返回空对象；这说明认证链路成功，不代表已有业务权限。
 完整测试创建的临时 Identity 已在验证后删除。
+
+## 第 6 步：验证 backend 动态更新
+
+本步骤验证后端 Pod 发生变化时，Kubernetes 和 Envoy Gateway 是否能够自动更新转发目标。
+当前 `xhs-service` 只有一个副本，因此删除 Pod 时可能会有一个短暂的不可用窗口；生产环境
+应使用多个副本和滚动更新降低这个窗口。
+
+### 删除前的状态
+
+```shell
+kubectl -n ddd-learn get deployment/xhs-service -o wide
+kubectl -n ddd-learn get pod -l app.kubernetes.io/instance=xhs -o wide
+kubectl -n ddd-learn get endpointslice \
+  -l kubernetes.io/service-name=xhs-service -o wide
+kubectl -n ddd-learn get gateway public-gateway -o wide
+```
+
+本次删除前，EndpointSlice 指向：
+
+```text
+xhs-service-846859f689-whkf6  10.42.0.40:8082
+public-gateway                192.168.2.41  PROGRAMMED=True
+```
+
+### 删除 Pod 并等待恢复
+
+```shell
+kubectl -n ddd-learn delete pod xhs-service-846859f689-whkf6
+kubectl -n ddd-learn wait --for=condition=Available \
+  deployment/xhs-service --timeout=120s
+kubectl -n ddd-learn get pod -l app.kubernetes.io/instance=xhs -o wide
+kubectl -n ddd-learn get endpointslice \
+  -l kubernetes.io/service-name=xhs-service -o wide
+kubectl -n ddd-learn get gateway public-gateway -o wide
+kubectl -n ddd-learn get httproute xhs-service \
+  -o jsonpath='{.status.parents[0].conditions}'
+```
+
+### 本次结果
+
+```text
+旧 Pod                      10.42.0.40  被删除
+新 Pod xhs-service-...-9rdz 10.42.0.43  Running 1/1
+EndpointSlice               10.42.0.43:8082
+Deployment                  Available=True
+Gateway                     PROGRAMMED=True
+HTTPRoute                   Accepted=True, ResolvedRefs=True
+```
+
+变化链路是：Deployment 重建 Pod → Pod 通过 Readiness 探针 → EndpointSlice 更新地址 →
+Envoy Gateway 观察 Service/EndpointSlice 变化并更新数据面路由。Gateway、HTTPRoute 和
+Service 本身不需要修改。
