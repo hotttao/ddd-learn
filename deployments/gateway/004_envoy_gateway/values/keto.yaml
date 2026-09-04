@@ -1,0 +1,49 @@
+# Envoy Gateway 实验的 Keto values；通过 helm -n ddd-learn 部署。
+fullnameOverride: keto
+replicaCount: 1
+
+image:
+  registry: ghcr.io
+  repository: hotttao/ory-keto
+  tag: v26.2.0
+  pullPolicy: IfNotPresent
+
+ingress:
+  read:
+    enabled: false
+  write:
+    enabled: false
+
+keto:
+  automigration:
+    enabled: true
+    type: job
+  config:
+    serve:
+      read:
+        host: 0.0.0.0
+        port: 4466
+      write:
+        host: 0.0.0.0
+        port: 4467
+    namespaces:
+      location: file:///etc/keto-namespaces/namespaces.ts
+    dsn: postgres://keto:keto@ddd-learn-postgres-rw:5432/keto?sslmode=disable
+
+service:
+  read:
+    headless:
+      enabled: false
+  write:
+    headless:
+      enabled: false
+
+deployment:
+  extraVolumes:
+    - name: keto-namespaces
+      configMap:
+        name: keto-namespaces
+  extraVolumeMounts:
+    - name: keto-namespaces
+      mountPath: /etc/keto-namespaces
+      readOnly: true

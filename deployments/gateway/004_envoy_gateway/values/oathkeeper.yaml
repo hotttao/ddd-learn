@@ -1,0 +1,93 @@
+# Envoy Gateway 实验的 Oathkeeper values；通过 helm -n ddd-learn 部署。
+fullnameOverride: oathkeeper
+replicaCount: 1
+demo: false
+maester:
+  enabled: false
+
+image:
+  registry: ghcr.io
+  repository: hotttao/ory-oathkeeper
+  tag: v26.2.0
+  pullPolicy: IfNotPresent
+
+service:
+  proxy:
+    enabled: true
+    type: ClusterIP
+    port: 4455
+  api:
+    enabled: true
+    type: ClusterIP
+    port: 4456
+
+ingress:
+  proxy:
+    enabled: false
+  api:
+    enabled: false
+
+oathkeeper:
+  managedAccessRules: true
+  config:
+    access_rules:
+      repositories:
+        - file:///etc/rules/access-rules.json
+    serve:
+      proxy:
+        host: 0.0.0.0
+        port: 4455
+      api:
+        host: 0.0.0.0
+        port: 4456
+      prometheus:
+        host: 0.0.0.0
+        port: 9000
+    authenticators:
+      cookie_session:
+        enabled: true
+        config:
+          check_session_url: http://kratos-public:80/sessions/whoami
+          preserve_path: true
+          subject_from: identity.id
+          only:
+            - ory_kratos_session
+    authorizers:
+      allow:
+        enabled: true
+    mutators:
+      id_token:
+        enabled: true
+        config:
+          issuer_url: http://oathkeeper-api:4456/
+          jwks_url: file:///etc/secrets/mutator.id_token.jwks.json
+          ttl: 5m
+          claims: |
+            {
+              "aud": ["internal-api"],
+              "principal_type": "user"
+            }
+    errors:
+      fallback:
+        - json
+      handlers:
+        json:
+          enabled: true
+  accessRules: |
+    [
+      {
+        "id": "internal-api-authentication",
+        "upstream": {"url": "http://xhs-service:8082"},
+        "match": {
+          "url": "http://<.*>/v1/<.*>",
+          "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"]
+        },
+        "authenticators": [{"handler": "cookie_session"}],
+        "authorizer": {"handler": "allow"},
+        "mutators": [{"handler": "id_token"}]
+      }
+    ]
+
+secret:
+  enabled: true
+  filename: mutator.id_token.jwks.json
