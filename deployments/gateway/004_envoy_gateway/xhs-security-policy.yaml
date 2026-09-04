@@ -1,0 +1,25 @@
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: xhs-oathkeeper
+  namespace: ddd-learn
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: xhs-service
+  extAuth:
+    # Oathkeeper 不可用或返回错误时拒绝请求，避免绕过认证。
+    failOpen: false
+    # HTTP ExtAuth 默认不会转发 Cookie，需要显式传给 Oathkeeper 校验 Kratos Session。
+    headersToExtAuth:
+      - Cookie
+    http:
+      backendRefs:
+        - name: oathkeeper-api
+          port: 4456
+      # Envoy 会把原请求路径追加到该前缀，例如 /decisions/v1/xhs/me/organizations。
+      path: /decisions
+      # 将 Oathkeeper id_token Mutator 签发的 Internal JWT 写入原始业务请求。
+      headersToBackend:
+        - authorization

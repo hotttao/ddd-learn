@@ -582,3 +582,76 @@ Mailpit 验证邮件                 包含 6 位验证码
 
 因此不能通过跳过注册后的验证码页面绕过限制：未验证用户之后再次登录时，
 `require_verified_address` 仍会阻止 Session 签发。
+
+## 第 4 步第 4 个功能点：接入 Oathkeeper External Auth
+
+`xhs-security-policy.yaml` 创建 Envoy Gateway `SecurityPolicy/xhs-oathkeeper`，只绑定
+`HTTPRoute/xhs-service`。UI、Kratos 和 Mailpit 路由不经过 Oathkeeper。
+
+```text
+浏览器携带 ory_kratos_session
+  → Envoy Gateway 匹配 HTTPRoute/xhs-service
+  → SecurityPolicy 调用 oathkeeper-api:4456
+  → Oathkeeper cookie_session 调用 Kratos /sessions/whoami
+  → Oathkeeper id_token Mutator 签发 Internal JWT
+  → Envoy 把 authorization 响应头写入原业务请求
+  → xhs_service 验证 JWT
+  → xhs_service 调用 Keto 判断业务权限
+```
+
+### Oathkeeper Decision API 路径
+
+SecurityPolicy 使用 `extAuth.http.path: /decisions`，不是 `pathOverride`。Envoy 会把原始
+请求路径追加到前缀：
+
+```text
+原请求：             GET /v1/xhs/me/organizations
+External Auth 请求： GET /decisions/v1/xhs/me/organizations
+Oathkeeper 还原：    GET /v1/xhs/me/organizations
+```
+
+Oathkeeper Decision Handler 去除 `/decisions` 后，用原业务路径匹配
+`internal-api-authentication` Rule。若使用 `pathOverride: /decisions`，原路径会丢失，Rule
+不能匹配。
+
+HTTP External Auth 默认不会传递 Cookie，因此策略通过 `headersToExtAuth` 显式传递
+`Cookie`。`headersToBackend` 只允许 Oathkeeper 响应中的 `authorization` 写入业务请求，
+不会把其他响应头当作可信身份信息。`failOpen: false` 表示 Oathkeeper 不可用时拒绝请求，
+不能绕过认证直接访问 `xhs_service`。
+
+### Internal JWT issuer
+
+`values/xhs.yaml` 显式设置：
+
+```text
+INTERNAL_JWT_ISSUER=http://oathkeeper-api:4456/
+INTERNAL_JWKS_URL=http://oathkeeper-api:4456/.well-known/jwks.json
+```
+
+issuer 必须与 Oathkeeper `id_token` Mutator 签发的 `iss` 完全一致。JWKS URL 只负责取得
+验签公钥，不会替代 issuer 和 audience 校验。
+
+### 创建和验证
+
+```shell
+kubectl apply \
+  -f deployments/gateway/004_envoy_gateway/xhs-security-policy.yaml
+
+helm upgrade --install xhs deployments/gateway/helm/xhs \
+  --namespace ddd-learn \
+  --values deployments/gateway/004_envoy_gateway/values/xhs.yaml
+```
+
+当前验证结果：
+
+```text
+SecurityPolicy                 Accepted=True
+未携带 Kratos Session          Oathkeeper 返回 401
+携带有效 Kratos Session        Oathkeeper granted=true
+Oathkeeper 响应                authorization: Bearer <Internal JWT>
+xhs_service 验证 JWT            成功
+GET /v1/xhs/me/organizations   200 {}
+```
+
+测试身份没有 Keto 组织关系，所以接口返回空对象；这说明认证链路成功，不代表已有业务权限。
+完整测试创建的临时 Identity 已在验证后删除。

@@ -16,6 +16,8 @@ env:
     value: ":8082"
   - name: INTERNAL_JWT_ENABLED
     value: "true"
+  - name: INTERNAL_JWT_ISSUER
+    value: "http://oathkeeper-api:4456/"
   - name: INTERNAL_JWKS_URL
     value: "http://oathkeeper-api:4456/.well-known/jwks.json"
   - name: KETO_ENABLED
