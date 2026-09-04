@@ -277,3 +277,40 @@ kubectl -n ddd-learn get rolebinding eg-gateway-helm-infra-manager -o yaml
 
 本功能点只安装控制面，没有创建 `GatewayClass`、`Gateway` 或 `HTTPRoute`。这些资源将在后续
 步骤中创建和验证。
+
+## 第 3 步第 2 个功能点：创建 GatewayClass
+
+### 资源
+
+文件：`gatewayclass.yaml`
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: envoy
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+```
+
+`GatewayClass` 是集群级资源，用于声明由哪个 Gateway Controller 管理后续的 `Gateway`。它
+本身不监听端口，也不创建 Envoy 数据面。
+
+### 创建和验证
+
+```shell
+kubectl apply -f deployments/gateway/004_envoy_gateway/gatewayclass.yaml
+kubectl get gatewayclass envoy -o yaml
+```
+
+当前状态：
+
+```text
+status.conditions.type:   Accepted
+status.conditions.status: True
+reason:                   Accepted
+message:                  Valid GatewayClass
+```
+
+这表示 Envoy Gateway Controller 已识别并接受 `controllerName`。当前仍未创建 `Gateway`、
+HTTP Listener 或 HTTPRoute。
