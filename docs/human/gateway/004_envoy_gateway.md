@@ -72,6 +72,52 @@ Gateway API 资源。
 删除一个 backend Pod、修改 Service 或调整 HTTPRoute，观察 Kubernetes 控制面、Envoy
 Gateway Controller 和 Envoy 数据面如何更新，并确认业务请求能够恢复或按预期变化。
 
+### 第 7 步：为 xhs_service 增加 RateLimit
+
+参考 `deployments/gateway/001_traefik_docker/traefik/dynamic.yml` 中的 Traefik
+`rateLimit` Middleware，为当前 Envoy Gateway 的 `/v1/xhs` 路由增加限流策略。
+
+1. 对照 Traefik 的 `average=5、burst=2`，说明它与 Envoy Gateway RateLimit 字段的对应关系；
+2. 使用当前版本支持的 `BackendTrafficPolicy` 和 Local Rate Limit，只绑定
+   `HTTPRoute/xhs-service`，不影响 UI、Kratos 和 Mailpit；
+3. 通过连续请求验证限流前的正常响应和超限后的 `429`，确认请求未到达
+   `xhs_service`；
+4. 分别验证未登录的 `401`、已认证但无业务权限的 `403` 与限流产生的 `429`，明确认证、
+   业务授权和流量治理的职责边界；
+5. 记录 Policy 的 Accepted/ResolvedRefs 状态以及当前 Envoy Gateway 版本对本地限流的
+   支持范围。
+
+本步骤只验证单个 Gateway 数据面实例内的本地限流。如果需要多个 Gateway Pod 之间共享
+计数器，应另行引入 Global Rate Limit Service 或外部计数存储，不能把 Local Rate Limit
+误认为全局配额。
+
+### 第 8 步：为所有对外服务增加客户端 mTLS
+
+当前“所有服务”指通过 Gateway 对外暴露的 UI、Kratos Public、`xhs_service` 和 Mailpit
+路由。使用一个专用 HTTPS/mTLS Listener，使这些路由都可以通过客户端证书验证后访问。
+
+1. 使用教学环境 CA 签发 Gateway 服务端证书和测试客户端证书，并将服务端证书、客户端
+   CA 证书分别保存为 Kubernetes Secret；
+2. 为 `public-gateway` 增加 HTTPS Listener，在 Gateway API 的 TLS 终止配置中挂载服务端
+   证书；
+3. 使用当前 Envoy Gateway 的 `ClientTrafficPolicy.clientValidation`，要求 Listener
+   只接受由指定 CA 签发的客户端证书；
+4. 将 UI、Kratos、`xhs_service` 和 Mailpit 的 HTTPRoute 接入该 mTLS Listener；
+5. 使用 `curl --cacert --cert --key` 验证：不带客户端证书失败、带错误证书失败、带正确
+   证书成功；成功后再分别验证 xhs 的 Oathkeeper 认证和 Keto 业务授权；
+6. 记录 Gateway、ClientTrafficPolicy、TLS Secret 和证书验证结果，说明服务端证书、
+   客户端证书和信任 CA 的关系。
+
+本步骤验证的是下游链路：
+
+```text
+客户端 --客户端证书--> Envoy Gateway --HTTP--> Kubernetes Service/Pod
+```
+
+它不会自动把 Envoy Gateway 到后端 Pod 的连接变成 mTLS。若要实现上游 mTLS，需要后端
+服务监听 HTTPS 并配置 `BackendTLSPolicy`，或者引入 Service Mesh 为工作负载提供身份和
+证书；这属于另一项实验，不能由客户端 mTLS 代替。
+
 ## 明确跳过的内容
 
 - 不创建 kind 集群；
