@@ -291,10 +291,16 @@ metadata:
   name: envoy
 spec:
   controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: public-proxy
+    namespace: ddd-learn
 ```
 
 `GatewayClass` 是集群级资源，用于声明由哪个 Gateway Controller 管理后续的 `Gateway`。它
-本身不监听端口，也不创建 Envoy 数据面。
+本身不监听端口，也不创建 Envoy 数据面。`parametersRef` 引用 namespace 内的
+`EnvoyProxy/public-proxy`，统一指定该 GatewayClass 生成的数据面资源参数。
 
 ### 创建和验证
 
@@ -312,5 +318,73 @@ reason:                   Accepted
 message:                  Valid GatewayClass
 ```
 
-这表示 Envoy Gateway Controller 已识别并接受 `controllerName`。当前仍未创建 `Gateway`、
+这表示 Envoy Gateway Controller 已识别并接受 `controllerName`。此时尚未创建 `Gateway`、
 HTTP Listener 或 HTTPRoute。
+
+## 第 3 步第 3 个功能点：创建 Gateway 和 HTTP Listener
+
+### 安装 Envoy Gateway 扩展 CRD
+
+当前 k3s 已提供标准 Gateway API CRD，但 `EnvoyProxy` 是 Envoy Gateway 自己定义的扩展
+资源，需要从本地 `gateway-crds-helm` Chart 单独安装。渲染时明确关闭标准 Gateway API
+CRD，避免覆盖 k3s 管理的版本：
+
+```shell
+helm template eg-crds deployments/gateway/helm/envoy_gateway/gateway-crds-helm \
+  --set crds.gatewayAPI.enabled=false \
+  --set crds.envoyGateway.enabled=true \
+  --output-dir /tmp/ddd-learn-eg-crds
+
+kubectl apply --server-side \
+  -f /tmp/ddd-learn-eg-crds/gateway-crds-helm/templates/generated
+```
+
+安装扩展 CRD 后需要重启控制器，使本次启动时建立 `EnvoyProxy` 的 watch：
+
+```shell
+kubectl -n ddd-learn rollout restart deployment/envoy-gateway
+kubectl -n ddd-learn rollout status deployment/envoy-gateway
+```
+
+### 数据面暴露方式
+
+`envoyproxy.yaml` 创建 `EnvoyProxy/public-proxy`，将 Envoy 数据面 Service 设置为
+`NodePort`。`gatewayclass.yaml` 通过 `parametersRef` 引用它。该配置属于数据面，不应写在
+Envoy Gateway Controller 自身的 `service.type` 中；后者只控制控制面 Service。
+
+```shell
+kubectl apply -f deployments/gateway/004_envoy_gateway/envoyproxy.yaml
+kubectl apply -f deployments/gateway/004_envoy_gateway/gatewayclass.yaml
+```
+
+### Gateway 和 Listener
+
+`gateway.yaml` 创建 `Gateway/public-gateway`，使用 `GatewayClass/envoy`，声明 HTTP 80
+Listener，并只允许同 namespace 的 HTTPRoute 挂载：
+
+```shell
+kubectl apply -f deployments/gateway/004_envoy_gateway/gateway.yaml
+```
+
+控制器据此创建 Envoy 数据面 Deployment、Pod、Service 和配置。当前结果：
+
+```text
+Gateway/public-gateway        Programmed=True，Address=192.168.2.41
+Envoy 数据面 Deployment       Available 1/1
+Envoy 数据面 Service          NodePort，80:30425/TCP
+访问入口                       http://192.168.2.41:30425
+```
+
+当前还没有 HTTPRoute，访问入口只会得到 Envoy 的无路由响应；下一步再将实际服务接入。
+
+### 为什么不能使用当前默认的 LoadBalancer
+
+k3s 的 ServiceLB 会为每个 `LoadBalancer` Service 创建 `svclb-*` DaemonSet，并让其中的
+Pod 在节点上声明与 Service 相同的 `hostPort`。集群自带 Traefik 已通过
+`svclb-traefik-*` 占用节点的 `hostPort: 80` 和 `hostPort: 443`。Envoy 数据面最初也使用
+`LoadBalancer`，其 ServiceLB Pod 因再次申请 `hostPort: 80` 而无法调度。
+
+这不是 ClusterIP 端口冲突。不同 Service 拥有不同的 ClusterIP，因此都可以暴露 80
+端口；冲突发生在单个节点共享的 hostPort 空间。`ss -tnlp` 只显示进程创建的监听 socket，
+不会完整表示 Kubernetes 调度器记录的 Pod hostPort 资源占用。将 Envoy Service 改为
+`NodePort` 后，不再创建 Envoy 的 ServiceLB Pod，也不再申请节点的 80 端口。

@@ -726,9 +726,10 @@ spec:
 当前安装配置中：
 
 - `envoy-gateway-config` 已创建，并已挂载到 Controller；
-- `EnvoyProxy` 扩展 CRD 尚未安装，因为本实验暂时使用 `crds.enabled: false`；
-- 当前没有 `EnvoyProxy` 实例；
-- 后续如果需要定制数据面，需要先安装 Envoy Gateway 扩展 CRD，再创建 `EnvoyProxy`。
+- 标准 Gateway API CRD 继续使用 k3s 已有版本；
+- Envoy Gateway 扩展 CRD 通过独立的 `gateway-crds-helm` Chart 安装；
+- `GatewayClass/envoy` 通过 `parametersRef` 引用 `ddd-learn` 中的
+  `EnvoyProxy/public-proxy`，当前用它将数据面 Service 配置为 `NodePort`。
 
 ## 十、初始化完成后的整体关系
 
