@@ -6,6 +6,10 @@ image:
   tag: "0.0.1"
   pullPolicy: IfNotPresent
 
+podLabels:
+  # DestinationRule 后续使用这个标签把现有实例归入 v1 subset。
+  version: v1
+
 service:
   type: ClusterIP
   port: 80

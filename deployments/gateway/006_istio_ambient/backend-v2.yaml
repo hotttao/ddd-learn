@@ -1,0 +1,65 @@
+# 第 7.1 步：创建 xhs_service 的 v2 工作负载。
+#
+# v1 由 Helm release xhs 管理；v2 使用相同的应用镜像和 ServiceAccount。
+# 两个 Deployment 共享 app.kubernetes.io/name 和 app.kubernetes.io/instance
+# 标签，因此会同时成为 xhs-service 的后端 Endpoint；version 标签用于
+# 后续 DestinationRule 的 subset 区分。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-v2
+  namespace: ddd-learn
+  labels:
+    app.kubernetes.io/name: xhs
+    app.kubernetes.io/instance: xhs
+    app.kubernetes.io/component: backend
+    version: v2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: xhs
+      app.kubernetes.io/instance: xhs
+      version: v2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: xhs
+        app.kubernetes.io/instance: xhs
+        app.kubernetes.io/component: backend
+        version: v2
+    spec:
+      # 复用 xhs-service 的身份，保持 v1/v2 属于同一个业务服务。
+      serviceAccountName: xhs-service
+      containers:
+        - name: xhs-service
+          image: xhs_service:0.0.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8082
+              protocol: TCP
+          env:
+            # 应用在容器内监听 8082，Service 通过 port 80 暴露。
+            - name: SERVER_ADDR
+              value: ":8082"
+            # v2 与 v1 使用相同的内部 JWT 公钥校验配置。
+            - name: INTERNAL_JWT_ENABLED
+              value: "true"
+            - name: INTERNAL_JWT_ISSUER
+              value: "http://oathkeeper-api:4456/"
+            - name: INTERNAL_JWKS_URL
+              value: "http://oathkeeper-api:4456/.well-known/jwks.json"
+            # 当前实验沿用 Keto 权限检查的服务地址。
+            - name: KETO_ENABLED
+              value: "true"
+            - name: KETO_READ_URL
+              value: "http://keto-read:80"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
