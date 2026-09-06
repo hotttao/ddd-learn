@@ -1,0 +1,26 @@
+# 第 7.2 步：通过 Istio VirtualService 在 xhs v1/v2 之间进行 90/10 灰度。
+# 该资源由 Istio 控制面下发给 xhs-waypoint，不由 Envoy Gateway 处理。
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: xhs-service-canary
+  namespace: ddd-learn
+spec:
+  # 与 DestinationRule.host 保持一致，匹配 mesh 内对 xhs Service 的请求。
+  hosts:
+    - xhs-service.ddd-learn.svc.cluster.local
+  http:
+    - name: xhs-v1-v2-weighted
+      route:
+        - destination:
+            host: xhs-service.ddd-learn.svc.cluster.local
+            subset: v1
+            port:
+              number: 80
+          weight: 90
+        - destination:
+            host: xhs-service.ddd-learn.svc.cluster.local
+            subset: v2
+            port:
+              number: 80
+          weight: 10

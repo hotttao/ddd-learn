@@ -1,0 +1,17 @@
+# 第 7.2 步：为 xhs_service 定义可供 VirtualService 选择的版本 subset。
+# 两个 subset 指向同一个 Kubernetes Service，但通过 Pod 的 version 标签区分后端。
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: xhs-service-versions
+  namespace: ddd-learn
+spec:
+  # 必须使用 Service 的稳定 DNS 名称，而不是某个 Pod IP。
+  host: xhs-service.ddd-learn.svc.cluster.local
+  subsets:
+    - name: v1
+      labels:
+        version: v1
+    - name: v2
+      labels:
+        version: v2
