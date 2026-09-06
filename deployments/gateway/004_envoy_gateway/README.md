@@ -783,3 +783,55 @@ echo
 数据面实例，所以计数器也只有一份；如果扩展多个 Gateway Pod，每个 Pod 的 Local Rate
 Limit 计数器彼此独立。需要集群范围共享配额时，应使用 Global Rate Limit Service，不能
 把 Local Rate Limit 当成全局限流。
+
+## 清理 Envoy Gateway 实验资源
+
+当切换到其他 Gateway 实验时，按以下顺序清理本实验创建的 Envoy Gateway 资源。先删除
+`HTTPRoute` 和 `Gateway`，让 Envoy Gateway Controller 有机会回收它自动生成的数据面；再删除
+`EnvoyProxy` 和 Helm Release。命令只针对 `ddd-learn` 中本实验的资源，不删除集群级 Gateway API
+CRD，也不删除 Istio 的 `GatewayClass`、Waypoint 或业务 Service。
+
+### 1. 删除入口路由和 Gateway
+
+```shell
+kubectl -n ddd-learn delete httproute \
+  kratos-public mailpit ui-example xhs-service \
+  --ignore-not-found
+kubectl -n ddd-learn delete gateway public-gateway --ignore-not-found
+```
+
+### 2. 删除 Envoy Gateway 为入口生成的数据面
+
+如果 Controller 仍在运行，它会根据 `public-gateway` 的删除事件自动回收数据面。若资源仍然
+存在，可使用入口归属标签精确清理，不要按 `app.kubernetes.io/name=envoy` 这种宽泛标签删除：
+
+```shell
+kubectl -n ddd-learn delete deployment,service,configmap \
+  -l gateway.envoyproxy.io/owning-gateway-name=public-gateway \
+  --ignore-not-found
+kubectl -n ddd-learn delete envoyproxy public-proxy --ignore-not-found
+```
+
+### 3. 删除 Envoy Gateway Controller
+
+```shell
+helm uninstall eg --namespace ddd-learn
+```
+
+如需确认清理结果：
+
+```shell
+kubectl -n ddd-learn get deploy,svc,pod \
+  -l app.kubernetes.io/managed-by=envoy-gateway
+kubectl get gatewayclass envoy --ignore-not-found
+helm list --namespace ddd-learn
+```
+
+最后一条 `GatewayClass/envoy` 如果仍存在，说明它是实验遗留的集群级声明，可在确认没有其他
+Envoy Gateway 实验依赖后再删除：
+
+```shell
+kubectl delete gatewayclass envoy --ignore-not-found
+```
+
+不要删除 `GatewayClass/istio`、`GatewayClass/istio-waypoint`，它们由 Istio Ambient 使用。
