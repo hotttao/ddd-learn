@@ -103,3 +103,9 @@ prefix_rule(
     decision = "allow",
     justification = "HTTP API and health-check requests"
 )
+
+prefix_rule(
+    pattern = ["sed"],
+    decision = "allow",
+    justification = "sed"
+)

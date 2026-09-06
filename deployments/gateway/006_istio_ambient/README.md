@@ -99,6 +99,50 @@ istioctl ztunnel-config workloads \
 输出中的 `frontend`、`other` 和 `xhs-service` 应显示 `PROTOCOL=HBONE`，`WAYPOINT=None`。
 这一步只验证 Ambient 接管和基础连通性，还没有配置 AuthorizationPolicy 或 waypoint。
 
+## 查看 workload identity
+
+Ambient 不使用 Pod IP 作为授权身份。Pod IP 只用于当前节点上的流量转发；Istio 使用 Pod 的
+Kubernetes ServiceAccount 生成工作负载身份。先查看测试 Pod 绑定的 ServiceAccount：
+
+```shell
+kubectl get pod -n ddd-learn \
+  -l app.kubernetes.io/part-of=istio-ambient-lab \
+  -o custom-columns='POD:.metadata.name,SERVICE_ACCOUNT:.spec.serviceAccountName,NAMESPACE:.metadata.namespace'
+```
+
+预期结果中，`ambient-frontend` 使用 `frontend`，`ambient-other` 使用 `other`。两个 Pod 虽然
+ServiceAccount 不同，但都位于 `ddd-learn` namespace。
+
+从 ztunnel 读取结构化 workload 配置：
+
+```shell
+istioctl ztunnel-config workloads \
+  -i istio-system \
+  --workload-namespace ddd-learn \
+  -o json
+```
+
+重点查看每个 workload 的以下字段：
+
+| 字段 | 当前示例 | 作用 |
+| --- | --- | --- |
+| `serviceAccount` | `frontend`、`other`、`xhs-service` | ztunnel 从 Kubernetes 工作负载得到的服务账号名称 |
+| `namespace` | `ddd-learn` | 身份所属的 Kubernetes namespace |
+| `trustDomain` | `cluster.local` | Istio 信任域，用于组成 SPIFFE 身份 |
+| `protocol` | `HBONE` | 该 workload 已由 Ambient ztunnel 接管 |
+| `workloadIps` | `10.42.0.x` | 数据面定位地址，不是授权主体 |
+
+在当前信任域下，`frontend` 的身份可表示为：
+
+```text
+spiffe://cluster.local/ns/ddd-learn/sa/frontend
+```
+
+`other` 和 `xhs-service` 的身份分别将最后的 ServiceAccount 替换为 `other` 和 `xhs-service`。
+后续 `AuthorizationPolicy` 使用的正是这类 workload identity，因此可以按调用方 ServiceAccount
+授权，而不依赖会变化的 Pod IP。`automountServiceAccountToken: false` 只是不把 Kubernetes API
+访问令牌挂载进业务容器，不会改变 ztunnel 根据 ServiceAccount 建立的 Istio 身份。
+
 ## Istio 部署完成检查
 
 ### 0. 本次安装命令
