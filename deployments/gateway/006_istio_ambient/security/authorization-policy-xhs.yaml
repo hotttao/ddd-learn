@@ -18,3 +18,6 @@ spec:
             # frontend ServiceAccount 对应的 Istio SPIFFE principal。
             principals:
               - cluster.local/ns/ddd-learn/sa/frontend
+              # 外部浏览器请求经 Istio Ingress + Oathkeeper Decision API 后，
+              # 由该 Ingress Gateway 作为 mesh 内调用方访问 xhs Waypoint。
+              - cluster.local/ns/ddd-learn/sa/istio-ingress-istio

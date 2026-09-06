@@ -1,0 +1,53 @@
+# Istio MeshConfig 的当前声明。
+#
+# 该配置通过 Istio 的 extension provider 注册 Oathkeeper Decision API。
+# Oathkeeper 只参与被 AuthorizationPolicy CUSTOM 选中的请求，不位于普通
+# 业务请求的数据转发链路中。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: istio
+  namespace: istio-system
+data:
+  mesh: |-
+    defaultConfig:
+      discoveryAddress: istiod.istio-system.svc:15012
+      image:
+        imageType: distroless
+      proxyMetadata:
+        ISTIO_META_ENABLE_HBONE: "true"
+    defaultProviders:
+      metrics:
+      - prometheus
+    enablePrometheusMerge: true
+    extensionProviders:
+    - name: oathkeeper
+      envoyExtAuthzHttp:
+        service: oathkeeper-api.ddd-learn.svc.cluster.local
+        port: 4456
+        pathPrefix: /decisions
+        timeout: 2s
+        failOpen: false
+        statusOnError: "503"
+        includeRequestHeadersInCheck:
+        - authorization
+        - cookie
+        - x-forwarded-proto
+        headersToUpstreamOnAllow:
+        - authorization
+        headersToDownstreamOnDeny:
+        - content-type
+        - www-authenticate
+        - location
+        - set-cookie
+    rootNamespace: istio-system
+    serviceScopeConfigs:
+    - scope: GLOBAL
+      servicesSelector:
+        matchExpressions:
+        - key: istio.io/global
+          operator: In
+          values:
+          - "true"
+    trustDomain: cluster.local
+  meshNetworks: 'networks: {}'
