@@ -143,6 +143,61 @@ spiffe://cluster.local/ns/ddd-learn/sa/frontend
 授权，而不依赖会变化的 Pod IP。`automountServiceAccountToken: false` 只是不把 Kubernetes API
 访问令牌挂载进业务容器，不会改变 ztunnel 根据 ServiceAccount 建立的 Istio 身份。
 
+## 验证 workload mTLS
+
+Ambient 的 mTLS 由节点上的 ztunnel 负责，业务容器不需要挂载证书，也不需要把请求改成
+`https://`。请求过程是：
+
+```text
+frontend 容器 --HTTP--> frontend 所在节点的 ztunnel
+                           --HBONE/mTLS--> xhs-service 所在节点的 ztunnel
+                                             --HTTP--> xhs_service 容器
+```
+
+从测试 Pod 发起实际请求：
+
+```shell
+kubectl exec -n ddd-learn \
+  deploy/ambient-frontend -- \
+  wget -qO- -T 5 http://xhs-service/health
+```
+
+预期业务响应仍然是：
+
+```json
+{"status":"ok"}
+```
+
+查看 ztunnel 为 workload 持有的证书摘要：
+
+```shell
+istioctl ztunnel-config certificates -i istio-system
+```
+
+重点检查 `frontend` 和 `xhs-service` 对应的身份：
+
+| 字段 | 预期 | 含义 |
+| --- | --- | --- |
+| `identity` | `spiffe://cluster.local/ns/ddd-learn/sa/frontend`、`.../xhs-service` | 证书绑定的 workload 身份 |
+| `Leaf` | `Available` | 当前 workload 的短期叶子证书已经可用 |
+| `Root` | `Available` | ztunnel 已取得验证对端证书的根证书 |
+| 有效期 | 约 24 小时 | Istio 会自动轮换 workload 证书 |
+
+再查看实际连接：
+
+```shell
+istioctl ztunnel-config connections \
+  -i istio-system \
+  --workload-namespace ddd-learn
+```
+
+服务间连接的 `PROTOCOL` 应显示为 `HBONE`。HBONE 是 Ambient 使用的隧道协议；其连接由双方
+ztunnel 使用 Istio workload 证书完成身份认证和加密。业务服务看到的仍然是普通 HTTP，因此
+本步骤没有修改 `xhs_service` 或 frontend 的代码和 TLS 配置。
+
+本步骤验证的是“身份凭证存在并用于 Ambient 隧道”。它还没有限制谁可以访问谁；访问控制将在
+下一步通过 `AuthorizationPolicy` 验证。
+
 ## Istio 部署完成检查
 
 ### 0. 本次安装命令
