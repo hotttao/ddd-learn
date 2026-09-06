@@ -198,6 +198,58 @@ ztunnel 使用 Istio workload 证书完成身份认证和加密。业务服务�
 本步骤验证的是“身份凭证存在并用于 Ambient 隧道”。它还没有限制谁可以访问谁；访问控制将在
 下一步通过 `AuthorizationPolicy` 验证。
 
+## 使用 AuthorizationPolicy 限制 xhs_service
+
+本步骤使用 `AuthorizationPolicy` 只允许 `frontend` 访问 xhs workload：
+
+```shell
+kubectl apply -f deployments/gateway/006_istio_ambient/authorization-policy-xhs.yaml
+kubectl get authorizationpolicy -n ddd-learn xhs-allow-frontend -o yaml
+```
+
+策略的 `selector` 匹配 xhs Helm release 实际生成的 Pod 标签：
+
+```yaml
+app.kubernetes.io/name: xhs
+app.kubernetes.io/instance: xhs
+```
+
+`rules.from.source.principals` 允许的来源是：
+
+```text
+cluster.local/ns/ddd-learn/sa/frontend
+```
+
+当一个 workload 被至少一个 `AuthorizationPolicy` 选中后，没有匹配 allow 规则的请求默认拒绝。
+因此 `other` 会被拒绝，而 `frontend` 可以访问。策略状态应包含：
+
+```text
+type: ZtunnelAccepted
+status: "True"
+reason: Accepted
+```
+
+分别从两个测试调用方验证：
+
+```shell
+kubectl exec -n ddd-learn deploy/ambient-frontend -- \
+  wget -qO- -T 5 http://xhs-service/health
+
+kubectl exec -n ddd-learn deploy/ambient-other -- \
+  wget -qO- -T 5 http://xhs-service/health
+```
+
+预期结果：
+
+| 调用方 | 结果 | 原因 |
+| --- | --- | --- |
+| `frontend` | 返回 `{"status":"ok"}` | mTLS 对端 principal 匹配 allow 规则 |
+| `other` | 请求被拒绝，可能表现为连接重置或 HTTP 403 | principal 不在允许列表中 |
+
+本策略只用于演示 Ambient 身份授权，因此当前 Envoy Gateway、Oathkeeper 或其他未加入 allow
+列表的调用方访问 xhs 也会被拒绝。生产策略需要把实际合法调用方逐一加入规则，或者为实验流量
+设计独立的测试 workload。
+
 ## Istio 部署完成检查
 
 ### 0. 本次安装命令
