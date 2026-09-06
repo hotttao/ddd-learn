@@ -1,8 +1,8 @@
 # gateway/006：Istio Ambient 基础配置
 
 本目录是 Istio Ambient 实验的基础服务配置，来源于 `gateway/004_envoy_gateway` 的当前服务架构。
-本次只保留运行实验所需的基础服务，不复制 Envoy Gateway 的 Gateway、HTTPRoute、ExtAuth、限流和
-mTLS 配置；Istio 的安装、网格标签、Waypoint、AuthorizationPolicy 和流量治理会在后续步骤单独加入。
+本次只保留运行实验所需的基础服务，不包含其他 Gateway 实验的入口控制器和入口资源；Istio 的安装、
+网格标签、Waypoint、入口路由、AuthorizationPolicy 和流量治理会在后续步骤单独加入。
 
 ## 当前基础服务
 
@@ -14,9 +14,25 @@ mTLS 配置；Istio 的安装、网格标签、Waypoint、AuthorizationPolicy �
 | `values/oathkeeper.yaml` | 部署 Oathkeeper API 和内部 JWT/JWKS 配置；关闭 Proxy |
 | `values/xhs.yaml` | 部署 `xhs_service`，保留内部 JWT 和 Keto 客户端配置 |
 | `keto/` | 提供组织与角色权限模型 |
-| `ory-seed.yaml` | 初始化 Alice、Bob 及组织 G 的教学数据 |
-| `ui.yaml` | 部署静态 UI |
-| `mailpit.yaml` | 部署开发环境邮件服务 |
+| `seed/ory-seed.yaml` | 初始化 Alice、Bob 及组织 G 的教学数据 |
+| `base/ui.yaml` | 部署静态 UI |
+| `base/mailpit.yaml` | 部署开发环境邮件服务 |
+
+## Manifest 目录
+
+按资源用途组织当前实验的声明文件，Helm values、Keto 模型、PostgreSQL 和初始化脚本继续
+使用各自的目录：
+
+| 子目录 | 内容 |
+| --- | --- |
+| `base/` | Ambient namespace 标签、测试 workload、UI 和 Mailpit |
+| `ingress/` | Istio Gateway、HTTPRoute 和 xhs Waypoint |
+| `security/` | Istio MeshConfig extension provider 与 AuthorizationPolicy |
+| `traffic/` | xhs v1/v2 后端、DestinationRule 和 VirtualService |
+| `seed/` | Alice、Bob、组织和关系的初始化 Job |
+| `keto/` | Keto namespace/model |
+| `postgres/` | CNPG PostgreSQL Cluster |
+| `values/` | Keto、Kratos、Oathkeeper、xhs 的 Helm values |
 
 ## 与 004 的关系
 
@@ -30,11 +46,11 @@ Istio 安装命令在实验步骤中单独执行；在加入 namespace 之前，
 ## 将 namespace 加入 Ambient
 
 ```shell
-kubectl apply -f deployments/gateway/006_istio_ambient/ambient-namespace.yaml
+kubectl apply -f deployments/gateway/006_istio_ambient/base/ambient-namespace.yaml
 ```
 
 `ambient-namespace.yaml` 使用 namespace 级标签启用 Ambient。标签会影响 `ddd-learn` 中所有工作负载，
-不只是 xhs_service；包括 PostgreSQL、Keto、Kratos、Oathkeeper、UI、Mailpit 和 Envoy Gateway。
+不只是 xhs_service；包括 PostgreSQL、Keto、Kratos、Oathkeeper、UI 和 Mailpit。
 
 如果 namespace 中已经存在 Pod，需要让这些 Pod 重新创建，使它们经过 Istio CNI 完成网络重定向。
 本实验使用以下精确资源列表：
@@ -43,8 +59,6 @@ kubectl apply -f deployments/gateway/006_istio_ambient/ambient-namespace.yaml
 kubectl rollout restart -n ddd-learn \
   deployment/ambient-frontend \
   deployment/ambient-other \
-  deployment/envoy-ddd-learn-public-gateway-daacb6b6 \
-  deployment/envoy-gateway \
   deployment/keto \
   deployment/kratos \
   deployment/mailpit \
@@ -203,7 +217,7 @@ ztunnel 使用 Istio workload 证书完成身份认证和加密。业务服务�
 本步骤使用 `AuthorizationPolicy` 只允许 `frontend` 访问 xhs workload：
 
 ```shell
-kubectl apply -f deployments/gateway/006_istio_ambient/authorization-policy-xhs.yaml
+kubectl apply -f deployments/gateway/006_istio_ambient/security/authorization-policy-xhs.yaml
 kubectl get authorizationpolicy -n ddd-learn xhs-allow-frontend -o yaml
 ```
 
@@ -246,8 +260,8 @@ kubectl exec -n ddd-learn deploy/ambient-other -- \
 | `frontend` | 返回 `{"status":"ok"}` | mTLS 对端 principal 匹配 allow 规则 |
 | `other` | 请求被拒绝，可能表现为连接重置或 HTTP 403 | principal 不在允许列表中 |
 
-本策略只用于演示 Ambient 身份授权，因此当前 Envoy Gateway、Oathkeeper 或其他未加入 allow
-列表的调用方访问 xhs 也会被拒绝。生产策略需要把实际合法调用方逐一加入规则，或者为实验流量
+本策略只用于演示 Ambient 身份授权，因此当前 Oathkeeper 或其他未加入 allow 列表的调用方访问
+xhs 也会被拒绝。生产策略需要把实际合法调用方逐一加入规则，或者为实验流量
 设计独立的测试 workload。
 
 ## 通过 manifest 部署 Waypoint
@@ -256,7 +270,7 @@ kubectl exec -n ddd-learn deploy/ambient-other -- \
 `xhs-waypoint.yaml`。该文件只声明 Gateway API 对象：
 
 ```shell
-kubectl apply -f deployments/gateway/006_istio_ambient/xhs-waypoint.yaml
+kubectl apply -f deployments/gateway/006_istio_ambient/ingress/xhs-waypoint.yaml
 ```
 
 `GatewayClass/istio-waypoint` controller 观察到这个对象后，会自动生成以下派生资源：
@@ -358,6 +372,67 @@ kubectl get service xhs-service -n ddd-learn \
 kubectl get authorizationpolicy xhs-allow-frontend -n ddd-learn -o yaml
 ```
 
+## 第 7.1 步：准备 v1/v2 后端
+
+本步骤只准备两个版本的工作负载，不配置流量比例。现有 Helm release `xhs` 作为
+`backend-v1`，通过 `values/xhs.yaml` 增加 `version: v1` Pod 标签；新增的
+`backend-v2.yaml` 创建 `backend-v2` Deployment，并使用 `version: v2` 标签。
+
+两个 Deployment 具有相同的 `app.kubernetes.io/name: xhs` 和
+`app.kubernetes.io/instance: xhs` 标签，因此都会被 `xhs-service` 选择；它们还复用
+`xhs-service` ServiceAccount，保持相同的 workload identity。`version` 标签只用于
+下一步的 `DestinationRule` subset，不会改变当前服务的业务代码。
+
+```bash
+helm upgrade --install xhs deployments/gateway/helm/xhs \
+  --namespace ddd-learn \
+  --values deployments/gateway/006_istio_ambient/values/xhs.yaml
+kubectl apply -f deployments/gateway/006_istio_ambient/traffic/backend-v2.yaml
+kubectl -n ddd-learn rollout status deployment/xhs-service
+kubectl -n ddd-learn rollout status deployment/backend-v2
+kubectl -n ddd-learn get pods -l app.kubernetes.io/name=xhs \
+  -L version -o wide
+kubectl -n ddd-learn get endpointslice \
+  -l kubernetes.io/service-name=xhs-service -o wide
+```
+
+预期可以看到一个 `version=v1` Pod 和一个 `version=v2` Pod，且两者都处于
+`Ready` 状态，并同时出现在 `xhs-service` 的 EndpointSlice 中。此时还没有灰度规则，
+Kubernetes Service 仍按默认方式选择后端；90/10 分流将在下一小步骤由 Istio 配置。
+
+## 第 7.2 步：使用 Istio 配置 90/10 灰度
+
+本步骤使用两个 Istio 原生流量治理对象：
+
+- `DestinationRule/xhs-service-versions`：根据 Pod 的 `version` 标签定义 `v1`、`v2` subset；
+- `VirtualService/xhs-service-canary`：匹配 `xhs-service.ddd-learn.svc.cluster.local`，将请求
+  按 90%/10% 发往 v1/v2。
+
+这两个对象作用于 mesh 内的 xhs Service 请求，不修改外部入口的 `HTTPRoute`，也不依赖 Envoy
+Gateway。由于 xhs Service 已绑定 `xhs-waypoint`，VirtualService 的 HTTP 路由由该 Waypoint
+执行，ztunnel 继续负责两端的 Ambient mTLS 和 L4 转发。
+
+```shell
+kubectl apply \
+  -f deployments/gateway/006_istio_ambient/traffic/xhs-destination-rule.yaml \
+  -f deployments/gateway/006_istio_ambient/traffic/xhs-virtual-service.yaml
+kubectl -n ddd-learn get destinationrule xhs-service-versions -o yaml
+kubectl -n ddd-learn get virtualservice xhs-service-canary -o yaml
+```
+
+从允许访问 xhs 的 frontend workload 连续请求：
+
+```shell
+kubectl -n ddd-learn exec deploy/ambient-frontend -- sh -c \
+  'i=0; while [ "$i" -lt 100; do wget -qO- -T 2 http://xhs-service/health >/dev/null || exit 1; i=$((i+1)); done; echo requests=100'
+kubectl -n ddd-learn exec deploy/xhs-waypoint -- \
+  pilot-agent request GET stats | rg 'backend-v2|destination_version.1.16.0'
+```
+
+Waypoint 的统计会分别出现 v1 和 v2 的 `destination_workload`，小样本的实际比例会围绕
+90/10 随机波动；验证重点是两个 subset 都收到流量，且 v2 的流量明显低于 v1。本步骤不包含
+timeout、Retry 或故障注入，它们在 7.3 单独配置和验证。
+
 预期 `Gateway` 为 `Accepted=True`、`Programmed=True`，AuthorizationPolicy 包含
 `WaypointAccepted=True`。最终访问验证仍然使用两个不同的 ServiceAccount：
 
@@ -370,6 +445,145 @@ kubectl exec -n ddd-learn deploy/ambient-other -- \
 ```
 
 预期 frontend 返回 `{"status":"ok"}`，other 返回 `HTTP 403 Forbidden`。
+
+## 8.2 使用 Istio Gateway API 恢复入口路由
+
+本步骤使用 Istio 自己的 Gateway API Controller，不使用 Envoy Gateway。入口资源关系如下：
+
+```text
+GatewayClass/istio
+    ↓ controllerName: istio.io/gateway-controller
+Gateway/istio-ingress
+    ↓ 自动生成
+Deployment/istio-ingress-istio + Service/istio-ingress-istio
+    ↑
+Service/istio-ingress-nodeport:30425
+    ↓
+HTTPRoute/istio-*
+```
+
+`istio-ingress-gateway.yaml` 声明 `Gateway/istio-ingress` 和固定 NodePort Service。Istio
+Controller 根据 Gateway 创建入口 Envoy Pod；项目自己的 `istio-ingress-nodeport` 只负责将
+局域网的 `30425` 端口转发到该 Pod，不负责解析路由。
+
+`istio-ingress-routes.yaml` 声明四个 `HTTPRoute`，它们的 `parentRefs` 都指向
+`Gateway/istio-ingress`：
+
+| HTTPRoute | 匹配路径 | 后端 | 说明 |
+| --- | --- | --- | --- |
+| `istio-ui-example` | `/` | `ui-example:80` | 页面和静态资源 |
+| `istio-kratos-public` | `/kratos` | `kratos-public:80` | 转发前移除 `/kratos` |
+| `istio-mailpit` | `/mailpit` | `mailpit:8025` | 保留 Mailpit base path |
+| `istio-xhs-service` | `/v1/xhs` | `xhs-service:80` | 保留 xhs_service 自己的 API 前缀 |
+
+部署和检查：
+
+```shell
+kubectl apply -f deployments/gateway/006_istio_ambient/ingress/istio-ingress-gateway.yaml
+kubectl apply -f deployments/gateway/006_istio_ambient/ingress/istio-ingress-routes.yaml
+kubectl -n ddd-learn get gateway istio-ingress -o wide
+kubectl -n ddd-learn get httproute \
+  istio-ui-example istio-kratos-public istio-mailpit istio-xhs-service
+kubectl -n ddd-learn get deployment,service \
+  -l gateway.networking.k8s.io/gateway-name=istio-ingress -o wide
+```
+
+当前页面入口：
+
+```text
+http://192.168.2.41:30425/
+```
+
+验证结果：页面返回 `200`，`/kratos/health/ready` 返回 `200`，未携带认证信息访问
+`/v1/xhs/health` 返回 `401`。响应中的 `server: istio-envoy` 说明请求已经由 Istio Ingress
+Gateway 处理；此时集群中不再需要 Envoy Gateway 的 `public-gateway`、`HTTPRoute`、
+`EnvoyProxy` 或 `GatewayClass/envoy`。
+
+## 8.3 使用 Istio CUSTOM 调用 Oathkeeper Decision API
+
+本步骤解决浏览器无法查询 Organization ID 的问题。浏览器只有 Kratos Session Cookie，
+而 `xhs_service` 只接受 Oathkeeper 签发的 Internal JWT；因此入口 Gateway 需要在请求进入
+xhs 之前完成一次外部授权检查，并把授权响应中的 JWT 传给上游。
+
+本实验使用 Oathkeeper 的 **Decision API**，不启用 Oathkeeper Proxy `4455`：
+
+```text
+浏览器
+  │ Kratos Session Cookie
+  ▼
+Istio Ingress Gateway
+  │ HTTP ext_authz subrequest: oathkeeper-api:4456/decisions/v1/xhs/...
+  │
+  ├── Oathkeeper cookie_session -> Kratos /sessions/whoami
+  ├── Oathkeeper allow authorizer
+  └── Oathkeeper id_token mutator -> Authorization: Bearer <Internal JWT>
+  │
+  └── 允许时把 Authorization Header 传给 xhs_service
+      └── xhs_service/serverhertz/jwt 使用 JWKS 校验 JWT
+```
+
+这样 Oathkeeper 不会代理每一个业务请求，也不会成为新的业务转发层；它只处理 Gateway
+发起的鉴权子请求。普通业务流量仍由 Istio Gateway API 和 Ambient Waypoint 转发。
+
+### 声明式配置
+
+`istio-mesh-config.yaml` 在 Istio `MeshConfig.extensionProviders` 注册名为 `oathkeeper`
+的 HTTP 外部授权服务：
+
+| 配置 | 作用 |
+| --- | --- |
+| `service` + `port: 4456` | 指向 Oathkeeper Decision API，而不是关闭的 Proxy 4455 |
+| `pathPrefix: /decisions` | Istio 将原始请求信息转成 Oathkeeper 的 Decision API 请求 |
+| `includeRequestHeadersInCheck` | 把 `cookie`、已有 `authorization` 等凭证传给 Oathkeeper |
+| `headersToUpstreamOnAllow: authorization` | 鉴权成功后把 Oathkeeper 签发的 Internal JWT 传给 xhs_service |
+| `headersToDownstreamOnDeny` | 把登录跳转、CSRF Cookie 和 WWW-Authenticate 等拒绝响应传回浏览器 |
+| `failOpen: false` | Oathkeeper 不可用时拒绝请求，避免鉴权失效变成放行 |
+
+`authorization-policy-ingress-oathkeeper.yaml` 使用 `action: CUSTOM`，只匹配
+`/v1/xhs` 和 `/v1/xhs/*`，并通过 `targetRefs` 绑定 `Gateway/istio-ingress`：
+
+```yaml
+targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: istio-ingress
+action: CUSTOM
+provider:
+  name: oathkeeper
+```
+
+这里不能使用普通 workload selector。selector 会让策略被 Ambient ztunnel 识别，而 ztunnel
+不支持 `CUSTOM`；绑定到 Gateway 后，策略由 Gateway 的 Envoy 执行 HTTP ext_authz。
+
+入口 Gateway 成功完成鉴权后，访问 xhs Waypoint 还需要通过
+`authorization-policy-xhs.yaml` 允许 `istio-ingress-istio` ServiceAccount。这个策略表达的
+是“入口 Gateway 可以调用 xhs Service”，不等同于用户授权；用户身份授权仍由 Oathkeeper
+和后续 xhs/Keto 业务逻辑负责。
+
+### 部署和检查
+
+```shell
+kubectl apply -f deployments/gateway/006_istio_ambient/security/istio-mesh-config.yaml
+kubectl apply -f deployments/gateway/006_istio_ambient/security/authorization-policy-ingress-oathkeeper.yaml
+kubectl apply -f deployments/gateway/006_istio_ambient/security/authorization-policy-xhs.yaml
+
+kubectl -n ddd-learn get authorizationpolicy \
+  istio-ingress-oathkeeper xhs-allow-frontend -o yaml
+kubectl -n istio-system get configmap istio \
+  -o jsonpath='{.data.mesh}'
+```
+
+`istio-ingress-oathkeeper` 应显示 `Accepted=True`，并且状态消息为绑定到
+`ddd-learn/istio-ingress`。没有 Session Cookie 的请求应被 Oathkeeper 拒绝：
+
+```shell
+curl -i http://192.168.2.41:30425/v1/xhs/me/organizations
+```
+
+预期返回 `401`。Oathkeeper 日志中应能看到 Gateway 发起的
+`/decisions/v1/xhs/me/organizations` 请求；这可以证明 ext_authz 链路已经生效。
+使用 Alice 登录后的浏览器 Cookie 访问同一个 URL 时，Oathkeeper 会验证 Kratos Session、
+签发 Internal JWT，Gateway 再将 JWT 传给 xhs_service，最终返回 Alice 所属的组织列表。
 
 ## Istio 部署完成检查
 

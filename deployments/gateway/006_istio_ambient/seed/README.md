@@ -23,7 +23,7 @@ Keto relation tuple 表示，OPL namespace 定义在 `keto/namespaces.ts`。
 先完成第 1 步中的 Kratos、Keto Helm 部署，再执行：
 
 ```shell
-kubectl apply -f deployments/gateway/006_istio_ambient/ory-seed.yaml
+kubectl apply -f deployments/gateway/006_istio_ambient/seed/ory-seed.yaml
 kubectl -n ddd-learn wait --for=condition=complete job/kratos-seed --timeout=180s
 kubectl -n ddd-learn wait --for=condition=complete job/keto-seed --timeout=180s
 ```
@@ -41,7 +41,7 @@ kubectl -n ddd-learn get secret,configmap,job -l app.kubernetes.io/name
 
 ```shell
 kubectl -n ddd-learn delete job kratos-seed keto-seed
-kubectl apply -f deployments/gateway/006_istio_ambient/ory-seed.yaml
+kubectl apply -f deployments/gateway/006_istio_ambient/seed/ory-seed.yaml
 ```
 
 清单中的密码是教学环境示例，生产环境应改成外部 Secret 或受保护的管理流程。
