@@ -1,0 +1,95 @@
+# Ambient 东西向流量实验的测试调用方。
+#
+# frontend 和 other 使用不同的 Kubernetes ServiceAccount，后续 AuthorizationPolicy
+# 可以根据 workload identity 区分它们。容器只作为长期运行的测试终端，不提供业务 HTTP 服务。
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: frontend
+  namespace: ddd-learn
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: other
+  namespace: ddd-learn
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-frontend
+  namespace: ddd-learn
+  labels:
+    # Deployment 自身的应用标识，用于 kubectl 查询、运维分组和实验资源筛选。
+    app.kubernetes.io/name: ambient-frontend
+    # 表示该 Deployment 属于 Istio Ambient 实验；Kubernetes 和 Istio 不会仅凭这个
+    # 标签自动启用 Ambient，它只是实验资源的分组标签。
+    app.kubernetes.io/part-of: istio-ambient-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      # Deployment 通过这个选择器认领下面 template 创建的 Pod。该字段必须与
+      # template.metadata.labels 中的同名键值匹配，而且创建后不能随意修改。
+      app.kubernetes.io/name: ambient-frontend
+  template:
+    metadata:
+      labels:
+        # Pod 的应用标识。Deployment selector、kubectl 查询以及后续 Istio
+        # AuthorizationPolicy 的 workloadSelector 都可以使用这个标签。
+        app.kubernetes.io/name: ambient-frontend
+        # Pod 的实验分组标签，便于一次筛选 frontend/other 测试工作负载。
+        app.kubernetes.io/part-of: istio-ambient-lab
+    spec:
+      # ServiceAccount 是这个 workload 在 Istio 中形成 SPIFFE 身份的来源，后续
+      # AuthorizationPolicy 可据此区分 frontend 和 other；它不是由 labels 产生的。
+      serviceAccountName: frontend
+      containers:
+        - name: client
+          # 这不是替换 xhs_service。frontend 只是东西向流量的调用方，不需要提供
+          # HTTP 服务；覆盖镜像入口为长驻 sleep，使 Pod 可以被 kubectl exec 使用，
+          # 并复用节点上已经存在的本地镜像。
+          image: xhs_service:0.0.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - while true; do sleep 3600; done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-other
+  namespace: ddd-learn
+  labels:
+    # Deployment 自身的应用标识；与 frontend 使用不同值，便于单独查询。
+    app.kubernetes.io/name: ambient-other
+    # 与 frontend 相同的实验分组标签，不代表 Istio 自动授权。
+    app.kubernetes.io/part-of: istio-ambient-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      # 只能认领 ambient-other 的 Pod，不能与 frontend 的 selector 交叉。
+      app.kubernetes.io/name: ambient-other
+  template:
+    metadata:
+      labels:
+        # Pod 应用标识，必须与上面的 Deployment selector 完全一致。
+        app.kubernetes.io/name: ambient-other
+        # 实验资源分组标签；后续可以用 -l app.kubernetes.io/part-of=istio-ambient-lab 查询。
+        app.kubernetes.io/part-of: istio-ambient-lab
+    spec:
+      # other 使用独立的 ServiceAccount，后续用它验证 AuthorizationPolicy 的拒绝效果。
+      serviceAccountName: other
+      containers:
+        - name: client
+          # other 同样只是测试调用方，不提供业务 HTTP 服务，因此使用长驻 sleep。
+          image: xhs_service:0.0.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - while true; do sleep 3600; done
