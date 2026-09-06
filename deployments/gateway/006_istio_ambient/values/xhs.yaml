@@ -10,6 +10,9 @@ service:
   type: ClusterIP
   port: 80
   targetPort: 8082
+  labels:
+    # 仅将 xhs Service 的流量交给 xhs-waypoint，不影响其他服务。
+    istio.io/use-waypoint: xhs-waypoint
 
 env:
   - name: SERVER_ADDR

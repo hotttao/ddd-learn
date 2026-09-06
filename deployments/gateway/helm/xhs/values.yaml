@@ -54,6 +54,8 @@ service:
   # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
   port: 80
   targetPort: 8082
+  # Additional labels for the Service, for example Istio waypoint binding.
+  labels: {}
 
 # Environment variables passed to xhs_service.
 env:

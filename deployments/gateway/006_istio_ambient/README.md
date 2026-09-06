@@ -250,6 +250,127 @@ kubectl exec -n ddd-learn deploy/ambient-other -- \
 列表的调用方访问 xhs 也会被拒绝。生产策略需要把实际合法调用方逐一加入规则，或者为实验流量
 设计独立的测试 workload。
 
+## 通过 manifest 部署 Waypoint
+
+本步骤不使用 `istioctl waypoint apply`，而是把 Waypoint 的期望状态保存为
+`xhs-waypoint.yaml`。该文件只声明 Gateway API 对象：
+
+```shell
+kubectl apply -f deployments/gateway/006_istio_ambient/xhs-waypoint.yaml
+```
+
+`GatewayClass/istio-waypoint` controller 观察到这个对象后，会自动生成以下派生资源：
+
+| 资源 | 作用 | 是否手工维护 |
+| --- | --- | --- |
+| `Gateway/xhs-waypoint` | Waypoint 的声明式入口，使用 `HBONE:15008` listener | 是，保存在 Git |
+| `Deployment/xhs-waypoint` | 运行 Waypoint Envoy | 否，由 controller 生成 |
+| `Service/xhs-waypoint` | 为 Waypoint 提供集群地址和 HBONE 端口 | 否，由 controller 生成 |
+| `ServiceAccount/xhs-waypoint` | Waypoint Envoy 的工作负载身份 | 否，由 controller 生成 |
+
+Waypoint 只处理 Service 流量，因为 Gateway 使用了：
+
+```yaml
+metadata:
+  labels:
+    istio.io/waypoint-for: service
+```
+
+listener 中的 `allowedRoutes.namespaces.from: Same` 是 Gateway API 的 Route 绑定范围控制。
+理解它需要区分“路由是否可以挂到 Gateway”和“请求是否有权限访问服务”两个过程。
+
+```yaml
+allowedRoutes:
+  namespaces:
+    from: Same
+```
+
+一个 Route 想使用 Gateway，通常需要在自己的 `parentRefs` 中引用 Gateway：
+
+```yaml
+spec:
+  parentRefs:
+    - name: xhs-waypoint
+      # 如果 Route 与 Gateway 不在同一个 namespace，通常还需要显式填写 namespace，
+      # 并且仍然要通过 Gateway listener 的 allowedRoutes 检查。
+```
+
+Gateway listener 按以下顺序判断：
+
+```text
+1. Route 声明 parentRefs，表示它想绑定哪个 Gateway
+2. Gateway 找到对应 listener
+3. listener 检查 Route 所在 namespace 是否被 allowedRoutes 接受
+4. 只有检查通过，Route 才能挂载到该 listener 并参与路由配置
+```
+
+`from: Same` 的具体结果是：`Gateway/xhs-waypoint` 位于 `ddd-learn`，因此只接受
+`ddd-learn` 中的 Route；其他 namespace 即使在 `parentRefs` 中写了 `xhs-waypoint`，也不能绑定。
+如果需要跨 namespace，可以使用 `from: All`，或使用 `from: Selector` 配合 namespace selector，
+但应同时考虑跨 namespace 的管理边界。
+
+当前实验没有 HTTPRoute 直接绑定这个 Waypoint，xhs 是通过 Service 上的
+`istio.io/use-waypoint: xhs-waypoint` 选择 Waypoint。`allowedRoutes` 只是限制谁可以把 Route
+挂到 Gateway listener，不决定 frontend 或 other 是否可以访问 xhs；访问权限仍由
+`AuthorizationPolicy` 判断。
+
+不要给 `ddd-learn` namespace 添加 `istio.io/use-waypoint`，否则 namespace 内的所有服务都会绑定
+该 Waypoint。本实验通过 xhs Helm values 给单个 Service 添加绑定：
+
+```yaml
+service:
+  labels:
+    istio.io/use-waypoint: xhs-waypoint
+```
+
+由于 Helm Chart 原先不支持 Service 自定义标签，本实验在
+`deployments/gateway/helm/xhs/templates/service.yaml` 中增加了 `service.labels` 渲染逻辑。
+使用 Helm 部署时执行：
+
+```shell
+helm upgrade --install xhs deployments/gateway/helm/xhs \
+  --namespace ddd-learn \
+  --values deployments/gateway/006_istio_ambient/values/xhs.yaml
+```
+
+绑定后的流量路径是：
+
+```text
+frontend 容器
+  → frontend 节点 ztunnel
+  → xhs-waypoint Envoy（L7）
+  → xhs 节点 ztunnel
+  → xhs_service 容器
+```
+
+因此 AuthorizationPolicy 使用 `targetRefs: Service/xhs-service`，由 xhs 对应的 Waypoint 执行；
+它可以继续使用 frontend 的原始 principal。若仍使用只选择 xhs Pod 的 workload selector，策略会
+在 ztunnel 层执行，不适合作为本步骤 Waypoint 的 Service 级 L7 策略。
+
+检查 Waypoint 和绑定状态：
+
+```shell
+kubectl get gateway xhs-waypoint -n ddd-learn
+kubectl get deployment,service,serviceaccount -n ddd-learn \
+  -l gateway.networking.k8s.io/gateway-name=xhs-waypoint
+kubectl get service xhs-service -n ddd-learn \
+  -o jsonpath='{.metadata.labels.istio\\.io/use-waypoint}{"\\n"}'
+kubectl get authorizationpolicy xhs-allow-frontend -n ddd-learn -o yaml
+```
+
+预期 `Gateway` 为 `Accepted=True`、`Programmed=True`，AuthorizationPolicy 包含
+`WaypointAccepted=True`。最终访问验证仍然使用两个不同的 ServiceAccount：
+
+```shell
+kubectl exec -n ddd-learn deploy/ambient-frontend -- \
+  wget -qO- -T 5 http://xhs-service/health
+
+kubectl exec -n ddd-learn deploy/ambient-other -- \
+  wget -qO- -T 5 http://xhs-service/health
+```
+
+预期 frontend 返回 `{"status":"ok"}`，other 返回 `HTTP 403 Forbidden`。
+
 ## Istio 部署完成检查
 
 ### 0. 本次安装命令

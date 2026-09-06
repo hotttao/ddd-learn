@@ -1,19 +1,17 @@
-# 第 5 步：只允许 frontend workload 访问 xhs_service。
+# 第 5、6 步：只允许 frontend workload 访问 xhs_service。
 #
-# selector 匹配 xhs Helm release 创建的 Pod 标签，而不是 Service 名称。
-# Ambient ztunnel 在 L4 层根据 mTLS 对端的 SPIFFE principal 执行这条策略。
+# 第 5 步的 workload selector 适用于 ztunnel L4 授权；绑定 Waypoint 后，使用
+# targetRefs 将策略交给 xhs Service 对应的 Waypoint 执行，保留原始调用方身份。
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
   name: xhs-allow-frontend
   namespace: ddd-learn
 spec:
-  selector:
-    matchLabels:
-      # xhs chart 的 workload 标签；fullnameOverride 不会改变这个 chart name 标签。
-      app.kubernetes.io/name: xhs
-      # 当前 Helm release 名称，避免误选其他 xhs chart 实例。
-      app.kubernetes.io/instance: xhs
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: xhs-service
   rules:
     - from:
         - source:
