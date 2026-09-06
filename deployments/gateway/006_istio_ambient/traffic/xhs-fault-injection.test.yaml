@@ -1,0 +1,46 @@
+# 临时测试清单：仅用于第 7.3 步，演示 Istio 的 HTTP 故障注入。
+#
+# 这个文件使用与正式配置相同的 VirtualService 名称。apply 后，它会临时替换正式的
+# xhs-service-canary 配置；测试结束后必须重新 apply xhs-virtual-service.yaml，恢复
+# 90/10 灰度、timeout 和 Retry 配置。
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  # 必须与正式 VirtualService 使用同一个名称，才能临时替换它，而不是产生两个可能
+  # 发生规则冲突的 VirtualService。
+  name: xhs-service-canary
+  namespace: ddd-learn
+spec:
+  # VirtualService 绑定的服务主机名，必须与 xhs Service 的稳定 DNS 名称一致。
+  hosts:
+    - xhs-service.ddd-learn.svc.cluster.local
+  http:
+    # 只有请求带有 x-demo-fault: delay 时才会命中这个测试路由。
+    # 不带这个 Header 的请求不会命中该临时清单中的路由。
+    - name: xhs-fault-delay
+      match:
+        - headers:
+            # 用自定义 Header 作为测试开关，避免普通请求默认触发故障。
+            x-demo-fault:
+              exact: delay
+      fault:
+        delay:
+          # 100% 的命中请求都注入延迟，不是随机抽样。
+          percentage:
+            value: 100
+          # 在转发到 xhs 后端前固定等待 3 秒，用于观察故障注入效果。
+          fixedDelay: 3s
+      # 该请求路由的总等待时间设置为 2 秒。
+      # 注意：Waypoint 中 fault delay 可能发生在 route timeout 计时之外，实际测试中
+      # 可能仍观察到约 3 秒后返回，因此不要仅凭该测试断言 timeout 已被触发。
+      timeout: 2s
+      route:
+        - destination:
+            # 目标仍然是 xhs Service，而不是某个 Pod IP；服务发现和 Waypoint 路由
+            # 仍由 Istio 处理。
+            host: xhs-service.ddd-learn.svc.cluster.local
+            # 只访问 v1 subset，避免测试请求被 90/10 灰度比例分散到 v2。
+            subset: v1
+            # 目标 Service 的服务端口。Service 会再映射到 xhs_service 容器端口 8082。
+            port:
+              number: 80

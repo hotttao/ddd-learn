@@ -1,4 +1,4 @@
-# 第 7.2 步：通过 Istio VirtualService 在 xhs v1/v2 之间进行 90/10 灰度。
+# 第 7.3 步：在 xhs v1/v2 灰度路由上增加超时与 Retry。
 # 该资源由 Istio 控制面下发给 xhs-waypoint，不由 Envoy Gateway 处理。
 apiVersion: networking.istio.io/v1
 kind: VirtualService
@@ -11,6 +11,15 @@ spec:
     - xhs-service.ddd-learn.svc.cluster.local
   http:
     - name: xhs-v1-v2-weighted
+      # 一次请求最多等待 2 秒；超过后不再等待该请求。
+      timeout: 2s
+      retries:
+        # 最多进行 3 次尝试（首次请求之外的重试次数由 Envoy 计算）。
+        attempts: 3
+        # 每次尝试最多等待 500ms，总超时仍受上面的 2s 限制。
+        perTryTimeout: 500ms
+        # 只对连接失败、流被拒绝、服务不可用和 5xx 响应重试。
+        retryOn: connect-failure,refused-stream,unavailable,5xx
       route:
         - destination:
             host: xhs-service.ddd-learn.svc.cluster.local

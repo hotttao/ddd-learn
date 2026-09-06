@@ -446,6 +446,61 @@ kubectl exec -n ddd-learn deploy/ambient-other -- \
 
 预期 frontend 返回 `{"status":"ok"}`，other 返回 `HTTP 403 Forbidden`。
 
+## 第 7.3 步：增加超时与 Retry 并验证
+
+本步骤在 `traffic/xhs-virtual-service.yaml` 的 90/10 路由上增加：
+
+```yaml
+timeout: 2s
+retries:
+  attempts: 3
+  perTryTimeout: 500ms
+  retryOn: connect-failure,refused-stream,unavailable,5xx
+```
+
+配置含义：
+
+| 配置 | 作用 |
+| --- | --- |
+| `timeout: 2s` | 一次完整请求最多等待 2 秒 |
+| `attempts: 3` | 最多尝试 3 次 |
+| `perTryTimeout: 500ms` | 每次上游尝试最多等待 500ms |
+| `retryOn` | 仅对连接失败、流拒绝、服务不可用和 5xx 进行重试 |
+
+总请求超时优先于单次尝试超时；Retry 不是无限重试，仍然受到总超时限制。
+
+### 临时故障注入
+
+`traffic/xhs-fault-injection.test.yaml` 是测试专用清单。它临时把同一个
+`VirtualService/xhs-service-canary` 替换为带 3 秒延迟的路由：
+
+```shell
+kubectl apply -f deployments/gateway/006_istio_ambient/traffic/xhs-fault-injection.test.yaml
+kubectl -n ddd-learn exec deploy/ambient-frontend -- \
+  wget -S -O- --header='x-demo-fault: delay' -T 6 http://xhs-service/health
+```
+
+测试完成后必须重新应用正式配置：
+
+```shell
+kubectl apply -f deployments/gateway/006_istio_ambient/traffic/xhs-virtual-service.yaml
+```
+
+实测可以观察到请求被注入约 3 秒延迟，说明 fault filter 已经由 xhs Waypoint 执行。需要注意，
+Waypoint 中的 fault delay 可能发生在 route timeout 计时器之外，因此不能仅凭这个测试断言
+`timeout: 2s` 已经触发；要严格验证超时，需要一个真实的慢响应或不可达上游。这个测试的目的只是
+验证 Istio 故障注入链路，同时不修改 `xhs_service` 代码。
+
+正式配置中不包含 `fault`，只保留 timeout 和 Retry。清理故障注入后的检查：
+
+```shell
+kubectl -n ddd-learn get virtualservice xhs-service-canary -o yaml
+kubectl -n ddd-learn exec deploy/ambient-frontend -- \
+  wget -qO- -T 5 http://xhs-service/health
+```
+
+请求应恢复正常，并继续使用 v1/v2 的 90/10 灰度路由。
+
 ## 8.2 使用 Istio Gateway API 恢复入口路由
 
 本步骤使用 Istio 自己的 Gateway API Controller，不使用 Envoy Gateway。入口资源关系如下：
