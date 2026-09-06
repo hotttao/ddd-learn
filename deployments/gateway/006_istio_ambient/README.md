@@ -27,6 +27,78 @@ mTLS 配置；Istio 的安装、网格标签、Waypoint、AuthorizationPolicy �
 本基础配置提交不包含 Istio 安装资源，也没有给 namespace 加 `istio.io/dataplane-mode=ambient` 标签。
 Istio 安装命令在实验步骤中单独执行；在加入 namespace 之前，不会改变现有工作负载的流量路径。
 
+## 将 namespace 加入 Ambient
+
+```shell
+kubectl apply -f deployments/gateway/006_istio_ambient/ambient-namespace.yaml
+```
+
+`ambient-namespace.yaml` 使用 namespace 级标签启用 Ambient。标签会影响 `ddd-learn` 中所有工作负载，
+不只是 xhs_service；包括 PostgreSQL、Keto、Kratos、Oathkeeper、UI、Mailpit 和 Envoy Gateway。
+
+如果 namespace 中已经存在 Pod，需要让这些 Pod 重新创建，使它们经过 Istio CNI 完成网络重定向。
+本实验使用以下精确资源列表：
+
+```shell
+kubectl rollout restart -n ddd-learn \
+  deployment/ambient-frontend \
+  deployment/ambient-other \
+  deployment/envoy-ddd-learn-public-gateway-daacb6b6 \
+  deployment/envoy-gateway \
+  deployment/keto \
+  deployment/kratos \
+  deployment/mailpit \
+  deployment/oathkeeper \
+  deployment/ui-example \
+  deployment/xhs-service \
+  statefulset/kratos-courier
+
+# PostgreSQL 由 CNPG Cluster 管理，不直接重启 StatefulSet；需要时只回收实例 Pod，
+# CNPG 会使用原 PVC 自动重建它。
+kubectl delete pod -n ddd-learn ddd-learn-postgres-1
+```
+
+如果只是在 namespace 标签存在之前部署工作负载，则不需要额外重启。删除 PostgreSQL Pod 不会删除
+CNPG Cluster 或 PVC，但 CNPG 的实例终止宽限期可能较长，重建期间 Keto、Kratos 等数据库依赖服务
+会暂时无法启动。
+
+## Ambient 加入后的验证
+
+检查 namespace 标签和测试调用方：
+
+```shell
+kubectl get namespace ddd-learn --show-labels
+kubectl get pods -n ddd-learn -l app.kubernetes.io/part-of=istio-ambient-lab -o wide
+```
+
+从两个不同身份的测试调用方访问 xhs 健康接口：
+
+```shell
+frontend=$(kubectl get pod -n ddd-learn \
+  -l app.kubernetes.io/name=ambient-frontend -o jsonpath='{.items[0].metadata.name}')
+other=$(kubectl get pod -n ddd-learn \
+  -l app.kubernetes.io/name=ambient-other -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n ddd-learn "${frontend}" -- wget -qO- -T 5 http://xhs-service/health
+kubectl exec -n ddd-learn "${other}" -- wget -qO- -T 5 http://xhs-service/health
+```
+
+两个请求都应返回：
+
+```json
+{"status":"ok"}
+```
+
+查看 ztunnel 是否识别工作负载，并确认协议为 HBONE：
+
+```shell
+istioctl ztunnel-config workloads \
+  -i istio-system \
+  --workload-namespace ddd-learn
+```
+
+输出中的 `frontend`、`other` 和 `xhs-service` 应显示 `PROTOCOL=HBONE`，`WAYPOINT=None`。
+这一步只验证 Ambient 接管和基础连通性，还没有配置 AuthorizationPolicy 或 waypoint。
+
 ## Istio 部署完成检查
 
 ### 0. 本次安装命令

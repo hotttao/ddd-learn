@@ -1,0 +1,9 @@
+# 将现有 ddd-learn namespace 加入 Istio Ambient。
+# namespace 级标签会作用于其中所有新建或重新创建的 Pod，包括 Ory、xhs、UI、Mailpit
+# 和 CNPG PostgreSQL；因此这是一个会影响整个实验拓扑的开关。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ddd-learn
+  labels:
+    istio.io/dataplane-mode: ambient
