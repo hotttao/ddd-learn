@@ -1,0 +1,46 @@
+# Istio Ambient 实验的外部入口。
+#
+# 这是 Gateway API Gateway，但由 Istio Gateway Controller 管理：
+#   GatewayClass/istio -> controllerName: istio.io/gateway-controller
+# 它不是 Envoy Gateway 的 GatewayClass，也不依赖 Envoy Gateway Controller。
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: istio-ingress
+  namespace: ddd-learn
+  annotations:
+    # Istio 自动生成的 Service 只作为集群内部服务；外部固定端口由下方
+    # istio-ingress-nodeport Service 明确声明，避免 NodePort 被随机分配。
+    networking.istio.io/service-type: ClusterIP
+spec:
+  gatewayClassName: istio
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        # 只允许同 namespace 的 HTTPRoute 绑定到这个入口。
+        namespaces:
+          from: Same
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: istio-ingress-nodeport
+  namespace: ddd-learn
+  labels:
+    app.kubernetes.io/name: istio-ingress
+    app.kubernetes.io/component: gateway
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      nodePort: 30425
+      protocol: TCP
+  # 选择 Istio Gateway API Controller 为 istio-ingress 创建的 Pod。
+  selector:
+    gateway.networking.k8s.io/gateway-name: istio-ingress

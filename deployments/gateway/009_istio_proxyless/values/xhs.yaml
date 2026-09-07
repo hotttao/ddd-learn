@@ -1,0 +1,43 @@
+# Istio Ambient 实验的 xhs_service values；部署到 ddd-learn namespace。
+fullnameOverride: xhs-service
+
+image:
+  repository: xhs_service
+  tag: "0.0.1"
+  pullPolicy: IfNotPresent
+
+podLabels:
+  # DestinationRule 后续使用这个标签把现有实例归入 v1 subset。
+  version: v1
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8082
+  labels:
+    # 仅将 xhs Service 的流量交给 xhs-waypoint，不影响其他服务。
+    istio.io/use-waypoint: xhs-waypoint
+
+env:
+  - name: SERVER_ADDR
+    value: ":8082"
+  - name: INTERNAL_JWT_ENABLED
+    value: "true"
+  - name: INTERNAL_JWT_ISSUER
+    value: "http://oathkeeper-api:4456/"
+  - name: INTERNAL_JWKS_URL
+    value: "http://oathkeeper-api:4456/.well-known/jwks.json"
+  - name: KETO_ENABLED
+    value: "true"
+  - name: KETO_READ_URL
+    value: "http://keto-read:80"
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http

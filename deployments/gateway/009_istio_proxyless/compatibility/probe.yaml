@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  # 为探针提供独立的 Kubernetes 工作负载身份，避免复用业务服务账号。
+  name: kitex-xds-compatibility
+  # 与本实验的业务服务处于同一 namespace，使 istiod 生成相同范围的配置视图。
+  namespace: ddd-learn
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  # 这是运行一次后退出的兼容性探针，不需要 Deployment 管理副本和滚动升级。
+  name: kitex-xds-compatibility
+  namespace: ddd-learn
+  labels:
+    # Kubernetes 推荐标签：标识当前对象的应用名称。
+    app.kubernetes.io/name: kitex-xds-compatibility
+    # Kubernetes 推荐标签：说明该探针属于 ddd-learn 教学系统。
+    app.kubernetes.io/part-of: ddd-learn
+spec:
+  # 显式使用上面创建的账号，后续改成 15012 mTLS 时可据此建立工作负载身份。
+  serviceAccountName: kitex-xds-compatibility
+  # 当前兼容性门禁连接 istiod 的集群内明文 xDS 端口 15010，
+  # 不需要调用 Kubernetes API，也不使用 Token 与 istiod 建立 mTLS 身份。
+  # 该设置避免把 ServiceAccount Token 自动挂载进容器。
+  # 生产 Proxyless 客户端应使用 15012，并配置证书获取与 mTLS，而不是照搬这里。
+  automountServiceAccountToken: false
+  # 探针无论成功还是失败都保持终止状态，方便查看退出码和日志，不自动重跑。
+  restartPolicy: Never
+  containers:
+    - name: probe
+      # 镜像只包含静态编译的 compatibility 二进制。
+      image: ddd-learn-kitex-xds-compatibility:0.0.1
+      # 镜像由实验者预先导入 k3s/containerd，禁止 Kubernetes 尝试访问远程仓库。
+      imagePullPolicy: Never
+      env:
+        # 以下三个字段通过 Downward API 从当前 Pod 元数据/状态读取，
+        # 用来构造发送给 istiod 的 xDS Node ID 与 Metadata。
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: INSTANCE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        # istiod 的 15010 是集群内明文 xDS 端口，仅用于本步骤的协议兼容性验证。
+        - name: KITEX_XDS_ISTIO_ADDR
+          value: istiod.istio-system.svc:15010

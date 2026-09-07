@@ -1,0 +1,23 @@
+# 只对从 Istio Ingress 进入的 xhs API 请求调用 Oathkeeper Decision API。
+# 未匹配 /v1/xhs 的请求不会触发这个外部授权 provider。
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: istio-ingress-oathkeeper
+  namespace: ddd-learn
+spec:
+  targetRefs:
+    # CUSTOM 必须绑定到由 Istio 管理的 Gateway Envoy，不能下发给 Ambient ztunnel。
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: istio-ingress
+  action: CUSTOM
+  provider:
+    # 名称必须与 MeshConfig.extensionProviders 中的 provider 一致。
+    name: oathkeeper
+  rules:
+    - to:
+        - operation:
+            paths:
+              - /v1/xhs
+              - /v1/xhs/*
