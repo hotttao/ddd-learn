@@ -30,7 +30,7 @@ spec:
   containers:
     - name: probe
       # 镜像只包含静态编译的 compatibility 二进制。
-      image: ddd-learn-kitex-xds-compatibility:0.0.1
+      image: ddd-learn-kitex-xds-compatibility:0.0.2
       # 镜像由实验者预先导入 k3s/containerd，禁止 Kubernetes 尝试访问远程仓库。
       imagePullPolicy: Never
       env:
@@ -51,3 +51,11 @@ spec:
         # istiod 的 15010 是集群内明文 xDS 端口，仅用于本步骤的协议兼容性验证。
         - name: KITEX_XDS_ISTIO_ADDR
           value: istiod.istio-system.svc:15010
+        # 目标服务配置用于模拟 Social/Kitex 客户端只访问 XHS 的场景。
+        - name: TARGET_SERVICE
+          value: xhs-service.ddd-learn.svc.cluster.local
+        - name: TARGET_PORT
+          value: "80"
+        # 对应当前实验中 DestinationRule 定义的 XHS v1/v2 subset。
+        - name: TARGET_SUBSETS
+          value: v1,v2

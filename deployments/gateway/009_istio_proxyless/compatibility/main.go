@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	// Kitex client，用于创建 ADS gRPC 客户端。
@@ -25,6 +27,11 @@ import (
 // istiod 的集群内明文 xDS 地址，仅用于本步骤的兼容性探针。
 const defaultIstiodAddress = "istiod.istio-system.svc:15010"
 
+const (
+	defaultTargetService = "xhs-service.ddd-learn.svc.cluster.local"
+	defaultTargetPort    = 80
+)
+
 // adsStream 是 Kitex ADS 双向流需要的最小接口。
 // 将流抽象为接口后，每个 getXDS 方法都可以专注于一种 Discovery Service。
 type adsStream interface {
@@ -33,15 +40,18 @@ type adsStream interface {
 }
 
 // compatibilityGate 保存一次兼容性检查所需的全部状态。
-// routeNames 和 endpointNames 分别保存 LDS -> RDS、CDS -> EDS 的依赖名称；
+// endpointNames 保存 CDS -> EDS 的依赖名称；
 // counts 保存每类资源收到的数量，避免在 main 中传递多个中间结果。
 type compatibilityGate struct {
 	stream adsStream
 	node   *corev3.Node
 
-	routeNames    []string
 	endpointNames []string
 	counts        map[string]int
+	subscriptions map[string][]string
+
+	targetService      string
+	targetClusterNames []string
 }
 
 func main() {
@@ -54,6 +64,12 @@ func main() {
 	podName := requiredEnv("POD_NAME")
 	namespace := requiredEnv("POD_NAMESPACE")
 	istiodAddress := getenv("KITEX_XDS_ISTIO_ADDR", defaultIstiodAddress)
+	targetService := getenv("TARGET_SERVICE", defaultTargetService)
+	targetPort, err := strconv.Atoi(getenv("TARGET_PORT", strconv.Itoa(defaultTargetPort)))
+	if err != nil || targetPort <= 0 {
+		log.Fatalf("invalid TARGET_PORT: %q", getenv("TARGET_PORT", strconv.Itoa(defaultTargetPort)))
+	}
+	targetClusterNames := buildClusterNames(targetService, targetPort, getenv("TARGET_SUBSETS", ""))
 
 	// Node.Metadata 描述客户端所处的运行环境。istiod 会据此计算当前 Pod
 	// 在所在 namespace 中应该看到的服务发现和流量配置。
@@ -89,7 +105,7 @@ func main() {
 		log.Fatalf("create Kitex ADS client: %v", err)
 	}
 
-	// ADS（Aggregated Discovery Service）使用一条双向流传输 NDS、LDS、RDS、CDS、EDS。
+	// ADS（Aggregated Discovery Service）使用一条双向流传输多种 xDS 资源。
 	stream, err := adsClient.StreamAggregatedResources(ctx)
 	if err != nil {
 		log.Fatalf("open ADS stream to %s: %v", istiodAddress, err)
@@ -97,24 +113,21 @@ func main() {
 
 	// main 只负责组装兼容性检查对象并启动流程；资源获取和状态维护由结构体完成。
 	gate := &compatibilityGate{
-		stream: stream,
-		node:   node,
-		counts: make(map[string]int, 5),
+		stream:             stream,
+		node:               node,
+		counts:             make(map[string]int, 5),
+		subscriptions:      make(map[string][]string, 5),
+		targetService:      targetService,
+		targetClusterNames: targetClusterNames,
 	}
 	if err := gate.run(); err != nil {
 		log.Fatal(err)
 	}
 }
 
-// run 按 NDS -> LDS -> RDS、CDS -> EDS 的依赖顺序调用各类 Discovery Service 方法。
+// run 按 NDS -> CDS -> EDS 的 Proxyless outbound 依赖顺序调用各类 Discovery Service 方法。
 func (g *compatibilityGate) run() error {
 	if err := g.getNDS(); err != nil {
-		return err
-	}
-	if err := g.getLDS(); err != nil {
-		return err
-	}
-	if err := g.getRDS(); err != nil {
 		return err
 	}
 	if err := g.getCDS(); err != nil {
@@ -124,7 +137,7 @@ func (g *compatibilityGate) run() error {
 		return err
 	}
 
-	// 五类资源都成功解析并 ACK，说明当前 Kitex xDS 实现通过基础兼容性门禁。
+	// NDS、CDS、EDS 都成功解析并 ACK，说明当前 Proxyless outbound 路径通过兼容性门禁。
 	names := make([]string, 0, len(g.counts))
 	for typeURL, count := range g.counts {
 		names = append(names, fmt.Sprintf("%s=%d", shortType(typeURL), count))
@@ -144,52 +157,23 @@ func (g *compatibilityGate) getNDS() error {
 	if err != nil {
 		return fmt.Errorf("decode NDS: %w", err)
 	}
-	log.Printf("NDS resource names=%v", sortedNames(resources.NameTable))
-	return g.saveACK(response, nil)
-}
-
-// getLDS 获取 Listener（LDS），并提取 Listener 引用的 RouteConfiguration 名称。
-// 提取出的名称保存到结构体，会作为 getRDS 的精确 ResourceNames。
-func (g *compatibilityGate) getLDS() error {
-	response, err := g.requestResource(xdsresource.ListenerTypeURL, nil)
-	if err != nil {
+	ips, found := resources.NameTable[g.targetService]
+	if !found {
+		return fmt.Errorf("NDS does not contain target service %q", g.targetService)
+	}
+	log.Printf("NDS target service=%s ips=%v", g.targetService, ips)
+	if err := g.acknowledge(response, nil); err != nil {
 		return err
 	}
-	resources, err := xdsresource.UnmarshalLDS(response.GetResources())
-	if err != nil {
-		return fmt.Errorf("decode LDS: %w", err)
-	}
-	log.Printf("LDS resource names=%v", sortedNames(resources))
-
-	for _, listener := range resources {
-		for _, filter := range listener.NetworkFilters {
-			if filter.RouteConfigName != "" {
-				g.routeNames = appendUnique(g.routeNames, filter.RouteConfigName)
-			}
-		}
-	}
-	sort.Strings(g.routeNames)
-	return g.saveACK(response, nil)
-}
-
-// getRDS 按 getLDS 保存的名称获取 RouteConfiguration（RDS）。
-func (g *compatibilityGate) getRDS() error {
-	response, err := g.requestResource(xdsresource.RouteTypeURL, g.routeNames)
-	if err != nil {
-		return err
-	}
-	resources, err := xdsresource.UnmarshalRDS(response.GetResources())
-	if err != nil {
-		return fmt.Errorf("decode RDS: %w", err)
-	}
-	log.Printf("RDS resource names=%v", sortedNames(resources))
-	return g.saveACK(response, g.routeNames)
+	g.counts[xdsresource.NameTableTypeURL] = 1
+	return nil
 }
 
 // getCDS 获取 Cluster（CDS），并提取 EDS 类型集群引用的 endpoint 名称。
-// 提取出的名称保存到结构体，会作为 getEDS 的精确 ResourceNames。
+// 提取出的名称保存到结构体，会作为 getED
+// S 的精确 ResourceNames。
 func (g *compatibilityGate) getCDS() error {
-	response, err := g.requestResource(xdsresource.ClusterTypeURL, nil)
+	response, err := g.requestResource(xdsresource.ClusterTypeURL, g.targetClusterNames)
 	if err != nil {
 		return err
 	}
@@ -197,16 +181,21 @@ func (g *compatibilityGate) getCDS() error {
 	if err != nil {
 		return fmt.Errorf("decode CDS: %w", err)
 	}
-	log.Printf("CDS resource names=%v", sortedNames(resources))
+	targetResources := filterResources(resources, g.targetClusterNames)
+	log.Printf("CDS target resource names=%v", sortedNames(targetResources))
 
-	for _, resource := range resources {
+	for _, resource := range targetResources {
 		cluster, ok := resource.(*xdsresource.ClusterResource)
 		if ok && cluster.DiscoveryType == xdsresource.ClusterDiscoveryTypeEDS && cluster.EndpointName != "" {
 			g.endpointNames = appendUnique(g.endpointNames, cluster.EndpointName)
 		}
 	}
 	sort.Strings(g.endpointNames)
-	return g.saveACK(response, nil)
+	if err := g.acknowledge(response, g.targetClusterNames); err != nil {
+		return err
+	}
+	g.counts[xdsresource.ClusterTypeURL] = len(targetResources)
+	return nil
 }
 
 // getEDS 按 getCDS 保存的名称获取 ClusterLoadAssignment（EDS）。
@@ -219,13 +208,43 @@ func (g *compatibilityGate) getEDS() error {
 	if err != nil {
 		return fmt.Errorf("decode EDS: %w", err)
 	}
-	log.Printf("EDS resource names=%v", sortedNames(resources))
-	return g.saveACK(response, g.endpointNames)
+	targetResources := filterResources(resources, g.endpointNames)
+	log.Printf("EDS target resource names=%v", sortedNames(targetResources))
+	if err := g.acknowledge(response, g.endpointNames); err != nil {
+		return err
+	}
+	g.counts[xdsresource.EndpointTypeURL] = len(targetResources)
+	return nil
+}
+
+// buildClusterNames 根据目标服务、端口和 subset 构造 CDS 的精确资源名称。
+// 例如 xhs-service 的 80 端口和 v1/v2 subset 会生成三个 Cluster 名称。
+func buildClusterNames(service string, port int, subsets string) []string {
+	names := []string{fmt.Sprintf("outbound|%d||%s", port, service)}
+	for _, subset := range splitCSV(subsets) {
+		names = append(names, fmt.Sprintf("outbound|%d|%s|%s", port, subset, service))
+	}
+	return names
+}
+
+// splitCSV 将环境变量中的逗号分隔 subset 转换为去空格、去重后的列表。
+func splitCSV(value string) []string {
+	var values []string
+	for _, item := range strings.Split(value, ",") {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			values = appendUnique(values, item)
+		}
+	}
+	return values
 }
 
 // requestResource 发送一种资源的订阅请求，并接收对应的 DiscoveryResponse。
-// NDS/LDS/CDS 使用空名称请求初始资源；RDS/EDS 使用父资源提取出的精确名称。
+// NDS 使用完整 NameTable；LDS、CDS、RDS、EDS 使用目标资源名称精确订阅。
 func (g *compatibilityGate) requestResource(typeURL string, resourceNames []string) (*discoveryv3.DiscoveryResponse, error) {
+	// 保存该类型的精确订阅名称。ADS 是异步流，等待目标响应时可能先收到其他类型的更新，
+	// 这些更新也必须用当前订阅名称 ACK，不能被误认为目标响应。
+	g.subscriptions[typeURL] = resourceNames
 	if err := g.stream.Send(&discoveryv3.DiscoveryRequest{
 		Node:          g.node,
 		TypeUrl:       typeURL,
@@ -233,20 +252,29 @@ func (g *compatibilityGate) requestResource(typeURL string, resourceNames []stri
 	}); err != nil {
 		return nil, fmt.Errorf("request %s: %w", shortType(typeURL), err)
 	}
-	response, err := g.stream.Recv()
-	if err != nil {
-		return nil, fmt.Errorf("receive %s: %w", shortType(typeURL), err)
+	for {
+		response, err := g.stream.Recv()
+		if err != nil {
+			return nil, fmt.Errorf("receive %s: %w", shortType(typeURL), err)
+		}
+		if response.GetTypeUrl() == typeURL {
+			log.Printf("compatible type=%s version=%q resources=%d", shortType(typeURL), response.GetVersionInfo(), len(response.GetResources()))
+			return response, nil
+		}
+
+		// 处理 ADS 流中先到达的异步更新，保持流状态后继续等待目标类型。
+		log.Printf("ignore unsolicited type=%s while waiting for %s", shortType(response.GetTypeUrl()), shortType(typeURL))
+		if err := g.validateResponse(response); err != nil {
+			return nil, err
+		}
+		if err := g.acknowledge(response, g.subscriptions[response.GetTypeUrl()]); err != nil {
+			return nil, err
+		}
 	}
-	if response.GetTypeUrl() != typeURL {
-		return nil, fmt.Errorf("expected %s response, got %s", shortType(typeURL), shortType(response.GetTypeUrl()))
-	}
-	log.Printf("compatible type=%s version=%q resources=%d", shortType(typeURL), response.GetVersionInfo(), len(response.GetResources()))
-	return response, nil
 }
 
-// saveACK 告知 istiod 已成功解析当前版本，并保存该类型的资源数量。
-// ACK 必须携带对应的版本、nonce 和精确订阅名称。
-func (g *compatibilityGate) saveACK(response *discoveryv3.DiscoveryResponse, resourceNames []string) error {
+// acknowledge 告知 istiod 已成功解析当前版本。ACK 必须携带对应的版本、nonce 和订阅名称。
+func (g *compatibilityGate) acknowledge(response *discoveryv3.DiscoveryResponse, resourceNames []string) error {
 	if err := g.stream.Send(&discoveryv3.DiscoveryRequest{
 		VersionInfo:   response.GetVersionInfo(),
 		Node:          g.node,
@@ -256,7 +284,29 @@ func (g *compatibilityGate) saveACK(response *discoveryv3.DiscoveryResponse, res
 	}); err != nil {
 		return fmt.Errorf("ACK %s: %w", shortType(response.GetTypeUrl()), err)
 	}
-	g.counts[response.GetTypeUrl()] = len(response.GetResources())
+	return nil
+}
+
+// validateResponse 使用 kitex-contrib/xds 的解码器验证异步响应，避免发送无效 ACK。
+func (g *compatibilityGate) validateResponse(response *discoveryv3.DiscoveryResponse) error {
+	var err error
+	switch response.GetTypeUrl() {
+	case xdsresource.NameTableTypeURL:
+		_, err = xdsresource.UnmarshalNDS(response.GetResources())
+	case xdsresource.ListenerTypeURL:
+		_, err = xdsresource.UnmarshalLDS(response.GetResources())
+	case xdsresource.RouteTypeURL:
+		_, err = xdsresource.UnmarshalRDS(response.GetResources())
+	case xdsresource.ClusterTypeURL:
+		_, err = xdsresource.UnmarshalCDS(response.GetResources())
+	case xdsresource.EndpointTypeURL:
+		_, err = xdsresource.UnmarshalEDS(response.GetResources())
+	default:
+		return fmt.Errorf("unexpected type URL %q", response.GetTypeUrl())
+	}
+	if err != nil {
+		return fmt.Errorf("decode unsolicited %s: %w", shortType(response.GetTypeUrl()), err)
+	}
 	return nil
 }
 
@@ -268,6 +318,22 @@ func sortedNames[T any](resources map[string]T) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// filterResources 只保留订阅目标对应的资源。即使控制面返回了更多资源，日志和统计也不展示它们。
+func filterResources[T any](resources map[string]T, wanted []string) map[string]T {
+	filtered := make(map[string]T, len(wanted))
+	for _, name := range wanted {
+		if resource, ok := resources[name]; ok {
+			filtered[name] = resource
+		}
+	}
+	return filtered
+}
+
+// filterNames 从资源名称中保留指定的名称，并保持排序后的稳定输出。
+func filterNames[T any](resources map[string]T, wanted []string) []string {
+	return sortedNames(filterResources(resources, wanted))
 }
 
 // appendUnique 去重，避免同一个 RDS/EDS 名称被重复订阅。
