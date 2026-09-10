@@ -22,8 +22,8 @@ XHS Kitex gRPC Server
 
 完成后应能观察到：
 
-1. `xhs_service` 使用 Kitex 和 gRPC Transport 提供内容查询 RPC。
-2. `social_service` 提供聚合查询 RPC，内部通过 Kitex Client 调用 `xhs_service`。
+1. 新建的 `xhs_grpc` 使用 Kitex 和 gRPC Transport 提供内容查询 RPC；现有 `xhs_service` 保持 Hertz 实现。
+2. `social_service` 提供聚合查询 RPC，内部通过 Kitex Client 调用 `xhs_grpc`。
 3. Social 的 Kitex Client 直接从 Istio 获取 XHS 的路由和 Endpoint 配置。
 4. XHS 故障由 Social 的 Outbound 熔断器统计并触发熔断。
 5. `ui_example` 提供 Social 内容查询页面，可以观察正常调用、故障和熔断响应。
@@ -48,7 +48,7 @@ Istio Gateway 可以通过 `GRPCRoute` 或 HTTP/2 路由把外部 gRPC 请求转
 
 ```text
 grpcurl --HTTP/2--> Gateway --gRPC--> XHS       可以
-browser fetch JSON --> Gateway --> gRPC XHS    不可以自动转换
+browser fetch JSON --> Gateway --> gRPC XHS    
 ```
 
 若要让浏览器直接调用，需要额外启用 gRPC-Web 或 Envoy gRPC-JSON Transcoder。本实验选择在
@@ -111,7 +111,7 @@ Waypoint 执行 L7 路由或重试。
 
 ### 第三步：将 XHS Transport 重构为 Kitex gRPC Server
 
-1. 保留 `xhs_service` 已有 domain、service、repository、Keto Client 和配置加载逻辑。
+1. 将 `xhs_grpc` 作为独立服务目录；现有 `xhs_service` 的 domain、service、repository、Keto Client 和配置加载逻辑保持不变。
 2. 使用 Kitex Handler 适配已有应用服务，不把业务逻辑重新写进 RPC Handler。
 3. 使用 gRPC Transport 启动 Kitex Server，并注册第二步生成的 XHS Service。
 4. 将 Internal JWT 的读取和 Principal 构造迁移到 Kitex Server Middleware。

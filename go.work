@@ -5,4 +5,5 @@ use (
 	./hertz_gen
 	./hertz_infra
 	./xhs_service
+	./xhs_grpc
 )

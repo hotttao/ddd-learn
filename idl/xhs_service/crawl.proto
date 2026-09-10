@@ -53,6 +53,7 @@ message StartCrawlTaskResponse {
 message ListCrawlContentsRequest {
   reserved 1;
   string organization_id = 2 [(api.path) = "organization_id"];
+  string keyword = 3 [(api.query) = "keyword"];
 }
 
 message ListCrawlContentsResponse {
@@ -63,6 +64,7 @@ message CrawlContent {
   string id = 1;
   string title = 2;
   string source_keyword = 3;
+  string platform = 4;
 }
 
 message GetKeywordsRequest {
