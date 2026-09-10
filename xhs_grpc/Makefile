@@ -10,7 +10,14 @@ kitex-gen:
 	$(KITEX_RUN) -module media_agent/xhs_grpc -type protobuf -I ../idl \
 		--protobuf 'Mxhs_service/organization.proto=media_agent/xhs_grpc/kitex_gen/xhs_service/organization' \
 		../idl/xhs_service/organization.proto
+	$(KITEX_RUN) -module media_agent/xhs_grpc -type protobuf -I ../idl -I . \
+		--protobuf 'Mhealth.proto=media_agent/xhs_grpc/kitex_gen/grpc/health/v1' \
+		health.proto
 
 .PHONY: test
 test:
 	GOWORK=off GOCACHE=/tmp/ddd-learn-xhs-grpc-cache go test ./kitex_gen/...
+
+.PHONY: run
+run:
+	GOWORK=off GOCACHE=/tmp/ddd-learn-xhs-grpc-cache go run .

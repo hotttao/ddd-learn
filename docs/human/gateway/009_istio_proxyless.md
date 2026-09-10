@@ -117,7 +117,7 @@ Waypoint 执行 L7 路由或重试。
 4. 将 Internal JWT 的读取和 Principal 构造迁移到 Kitex Server Middleware。
 5. 将 HTTP Header 中的身份传播约定改为对应的 gRPC Metadata 约定。
 6. 增加 gRPC Health Checking，供 Kubernetes readiness/liveness probe 使用。
-7. 删除已经不再使用的 Hertz 路由生成入口，但保留与本实验无关的业务层代码。
+7. 保留 `xhs_service` 的 Hertz 路由入口；`xhs_grpc` 作为独立服务，不修改旧服务的生成路由。
 
 验证：使用不经过 xDS 的固定地址 Kitex Client 直接调用 XHS；正常身份可以查询内容，缺少或错误
 Internal JWT 被拒绝，Keto 授权结果保持不变。
