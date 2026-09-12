@@ -113,6 +113,41 @@ kubectl -n ddd-learn describe pod -l 'app.kubernetes.io/instance=xhs-grpc'
 东西向流量继续由 ztunnel 接管。当前步骤不修改旧 XHS 的 HTTPRoute，HTTP/JSON 转码留到
 下一步处理。
 
+## 第五步：生成 XHS gRPC-JSON Transcoder 配置
+
+先根据 XHS Protobuf IDL 生成 descriptor：
+
+```bash
+cd xhs_grpc
+make descriptor
+```
+
+输出文件为：
+
+```text
+deployments/gateway/009_istio_proxyless/transcoder/xhs.pb
+```
+
+再将 descriptor 内联到只作用于 Istio Ingress Gateway 的 EnvoyFilter：
+
+```bash
+make transcoder-filter
+```
+
+生成文件为：
+
+```text
+deployments/gateway/009_istio_proxyless/ingress/xhs-grpc-transcoder.yaml
+```
+
+该 EnvoyFilter 使用 `workloadSelector` 匹配
+`gateway.networking.k8s.io/gateway-name: istio-ingress`，并在 HTTP Connection Manager 的
+router filter 之前插入 `envoy.filters.http.grpc_json_transcoder`。descriptor 通过
+`proto_descriptor_bin` 内联，当前只启用 `CrawlService` 和 `OrganizationService`。
+
+本步骤只生成声明式配置，尚未执行 `kubectl apply`；实际 Filter Chain 和 HTTP/JSON 转码在后续
+步骤验证。
+
 ## 第五步：生成 XHS gRPC-JSON Transcoder descriptor
 
 本步骤只生成 descriptor，不创建 `EnvoyFilter`，也不修改现有 HTTPRoute。
