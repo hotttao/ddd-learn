@@ -112,3 +112,27 @@ kubectl -n ddd-learn describe pod -l 'app.kubernetes.io/instance=xhs-grpc'
 `xhs-grpc-service` 没有绑定 Waypoint，但 Pod 仍处于 `ddd-learn` 的 Ambient namespace 中，
 东西向流量继续由 ztunnel 接管。当前步骤不修改旧 XHS 的 HTTPRoute，HTTP/JSON 转码留到
 下一步处理。
+
+## 第五步：生成 XHS gRPC-JSON Transcoder descriptor
+
+本步骤只生成 descriptor，不创建 `EnvoyFilter`，也不修改现有 HTTPRoute。
+descriptor 是 Protobuf 的 `FileDescriptorSet` 二进制文件，包含 XHS 的 service、RPC、message
+以及 `google.api.http` 注解。Envoy 的 gRPC-JSON Transcoder 通过它建立 HTTP/JSON 请求和
+gRPC 方法之间的映射。
+
+在 `xhs_grpc` 目录执行：
+
+```bash
+cd xhs_grpc
+make descriptor
+```
+
+生成文件：
+
+```text
+deployments/gateway/009_istio_proxyless/transcoder/xhs.pb
+```
+
+生成命令使用 `--include_imports`，因此 descriptor 内同时包含 XHS IDL 和
+`google/api/annotations.proto` 等依赖；使用 `--include_source_info` 便于调试和定位 IDL
+来源。后续 Gateway 配置直接引用该文件，不需要在运行时读取源码或重新执行 `protoc`。
