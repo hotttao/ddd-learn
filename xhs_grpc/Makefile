@@ -21,3 +21,7 @@ test:
 .PHONY: run
 run:
 	GOWORK=off GOCACHE=/tmp/ddd-learn-xhs-grpc-cache go run .
+
+.PHONY: image
+image:
+	docker build -f Dockerfile -t xhs_grpc:0.0.1 ..

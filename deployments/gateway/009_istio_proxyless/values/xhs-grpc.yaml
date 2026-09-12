@@ -1,0 +1,34 @@
+# xhs_grpc 的独立部署配置；不会覆盖现有 xhs_service/xhs-service。
+fullnameOverride: xhs-grpc-service
+
+replicaCount: 2
+
+image:
+  repository: xhs_grpc
+  tag: "0.0.1"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8090
+  # Service 的端口名称使用 grpc，供 Istio 和 Kubernetes 识别协议。
+  portName: grpc
+  appProtocol: grpc
+  labels: {}
+
+env:
+  - name: INTERNAL_JWT_ISSUER
+    value: "http://oathkeeper-api:4456/"
+  - name: INTERNAL_JWT_AUDIENCE
+    value: internal-api
+  - name: INTERNAL_JWKS_URL
+    value: "http://oathkeeper-api:4456/.well-known/jwks.json"
+
+livenessProbe:
+  grpc:
+    port: grpc
+
+readinessProbe:
+  grpc:
+    port: grpc

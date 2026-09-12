@@ -75,3 +75,40 @@ compatibility gate passed: [...]
 
 这一步只验证 Kitex xDS 客户端能否连接 Istio 并按 XHS 目标订阅、解析 outbound 基础资源；
 Router、Resolver 和 Circuit Breaker 的运行时行为在后续步骤验证。
+
+## 第四步：部署独立的 xhs_grpc
+
+本步骤保留原有 `xhs_service/xhs-service`，新增独立的 `xhs_grpc/xhs-grpc-service`，避免
+Hertz HTTP 服务和 Kitex gRPC 服务混淆。新服务使用两个 Pod，容器监听 `8090`，Service
+对内暴露 `80`，端口名称为 `grpc`。
+
+构建镜像并导入 k3s：
+
+```bash
+cd xhs_grpc
+make image
+docker save -o /tmp/xhs_grpc-0.0.1.tar xhs_grpc:0.0.1
+sudo k3s ctr -n k8s.io images import /tmp/xhs_grpc-0.0.1.tar
+```
+
+部署：
+
+```bash
+helm upgrade --install xhs-grpc deployments/gateway/helm/xhs \
+  --namespace ddd-learn --create-namespace \
+  --values deployments/gateway/009_istio_proxyless/values/xhs-grpc.yaml
+```
+
+验证资源和 gRPC Probe：
+
+```bash
+kubectl -n ddd-learn get pods -l 'app.kubernetes.io/instance=xhs-grpc'
+kubectl -n ddd-learn get service xhs-grpc-service
+kubectl -n ddd-learn get endpointslice \
+  -l kubernetes.io/service-name=xhs-grpc-service -o wide
+kubectl -n ddd-learn describe pod -l 'app.kubernetes.io/instance=xhs-grpc'
+```
+
+`xhs-grpc-service` 没有绑定 Waypoint，但 Pod 仍处于 `ddd-learn` 的 Ambient namespace 中，
+东西向流量继续由 ztunnel 接管。当前步骤不修改旧 XHS 的 HTTPRoute，HTTP/JSON 转码留到
+下一步处理。

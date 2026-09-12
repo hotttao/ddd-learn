@@ -1,0 +1,16 @@
+.git
+.github
+.codex
+.agents
+
+ui_example/node_modules
+ui_example/dist
+ui_example/.next
+**/node_modules
+**/.build
+**/.cache
+**/tmp
+
+deployments
+legacy
+third_party
