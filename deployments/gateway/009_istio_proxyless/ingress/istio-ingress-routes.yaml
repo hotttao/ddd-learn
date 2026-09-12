@@ -62,7 +62,8 @@ spec:
         - name: mailpit
           port: 8025
 ---
-# xhs_service 自己使用 /v1/xhs 前缀，入口不做 URL Rewrite。
+# XHS HTTP/JSON 请求保留 /v1/xhs 前缀；Transcoder 会根据 descriptor 将请求转换为 gRPC。
+# 后端切换到独立的 xhs_grpc，旧的 xhs_service HTTP 服务不参与本实验链路。
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -78,5 +79,5 @@ spec:
             type: PathPrefix
             value: /v1/xhs
       backendRefs:
-        - name: xhs-service
+        - name: xhs-grpc-service
           port: 80

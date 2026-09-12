@@ -148,6 +148,31 @@ router filter 之前插入 `envoy.filters.http.grpc_json_transcoder`。descripto
 本步骤只生成声明式配置，尚未执行 `kubectl apply`；实际 Filter Chain 和 HTTP/JSON 转码在后续
 步骤验证。
 
+## 第五步：将 `/v1/xhs` 路由切换到 gRPC Service
+
+`ingress/istio-ingress-routes.yaml` 中的 `HTTPRoute/istio-xhs-service` 仍然匹配
+`/v1/xhs`，但后端已经切换为：
+
+```yaml
+backendRefs:
+  - name: xhs-grpc-service
+    port: 80
+```
+
+入口请求的处理顺序是：
+
+```text
+HTTP/JSON /v1/xhs/*
+  → HTTPRoute 匹配
+  → Oathkeeper ext_authz
+  → grpc_json_transcoder 根据 xhs.pb 转成 gRPC
+  → xhs-grpc-service:80
+  → xhs_grpc Pod:8090
+```
+
+旧的 `xhs-service` HTTP 后端不参与这条新链路；Oathkeeper 的认证规则仍按 `/v1/xhs` 匹配，
+因此本步骤没有改变认证入口。
+
 ## 第五步：生成 XHS gRPC-JSON Transcoder descriptor
 
 本步骤只生成 descriptor，不创建 `EnvoyFilter`，也不修改现有 HTTPRoute。
