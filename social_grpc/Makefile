@@ -11,3 +11,8 @@ kitex-gen:
 .PHONY: test
 test:
 	GOWORK=off GOCACHE=/tmp/ddd-learn-social-grpc-cache go test ./...
+
+.PHONY: image
+# 镜像构建使用仓库根目录作为 Docker context，以复制 social_grpc 的完整模块。
+image:
+	docker build -f Dockerfile -t social_grpc:0.0.1 ..

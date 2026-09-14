@@ -243,3 +243,42 @@ Kratos Session Cookie
 
 两个 `xhs-grpc-service` Pod 均为 Ready，说明 Kubernetes 原生 gRPC Probe 可以直接调用各
 Pod 的 `grpc.health.v1.Health/Check`；Ambient 不需要将 Probe 改写给 Sidecar。
+
+## 第六步：部署 Social gRPC Service
+
+本步骤只把 Social 的 Mock Provider 部署到当前 Ambient namespace，不接入 Gateway、JWT、xDS、
+故障注入或熔断。Social 使用与 `xhs_grpc` 相同的 Kitex gRPC Transport，监听容器端口 `8091`，
+Service 对内暴露 `80`，端口名称为 `grpc`。
+
+镜像构建和导入：
+
+```bash
+cd social_grpc
+make image
+docker save -o /tmp/ddd-learn-social-grpc-0.0.1.tar social_grpc:0.0.1
+sudo k3s ctr -n k8s.io images import /tmp/ddd-learn-social-grpc-0.0.1.tar
+```
+
+部署命令：
+
+```bash
+helm upgrade --install social-grpc deployments/gateway/helm/xhs \
+  --namespace ddd-learn-proxyless \
+  --values deployments/gateway/009_istio_proxyless/values/social-grpc.yaml
+```
+
+这里复用已有的通用 `helm/xhs` Chart，使用 `fullnameOverride` 将资源命名为
+`social-grpc-service`；Chart 的模板负责生成 Deployment、Service 和 ServiceAccount，
+Social 的差异只放在 `values/social-grpc.yaml` 中。这样不会复制一份结构相同的 Helm 模板。
+
+验证：
+
+```bash
+kubectl -n ddd-learn-proxyless rollout status deployment/social-grpc-service
+kubectl -n ddd-learn-proxyless get deployment,service,pod \
+  -l app.kubernetes.io/instance=social-grpc -o wide
+```
+
+当前验证结果为 1 个 Pod Ready，容器名为 `xhs` 是通用 Chart 的容器名称；Pod 没有
+`istio-proxy`，并带有 `ambient.istio.io/redirection=enabled`。后续接入 Social Gateway
+路由和真实 XHS Kitex Client 时，再增加对应的 descriptor、HTTPRoute 和 xDS 配置。
