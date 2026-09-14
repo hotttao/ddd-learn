@@ -344,3 +344,22 @@ curl -i 'http://192.168.2.41:30425/v1/social/organizations/G/contents?keyword=go
 
 预期返回 `401`。这证明请求已经进入 Oathkeeper 认证链；Social Handler 的 JWT 解析和
 用户组织/Keto 权限校验仍在后续步骤实现。
+
+## 第九步：增加 Social 调试页面
+
+`ui_example` 新增 `/social` 页面，仅对已登录用户显示。页面使用浏览器当前的 Kratos
+Session Cookie，请求两个 Social HTTP/JSON 接口：
+
+```text
+GET /v1/social/me/organizations
+GET /v1/social/organizations/{organization_id}/contents?keyword=...
+```
+
+页面负责选择组织、输入关键词和展示结果；权限判断仍由后端完成。构建验证：
+
+```bash
+cd ui_example
+npm run build
+```
+
+本步骤构建通过。未登录时页面显示登录入口，登录后才请求 Social 接口。

@@ -8,6 +8,7 @@ import RecoveryFlowPage from "@/pages/auth/RecoveryFlowPage";
 import SessionPage from "@/pages/auth/SessionPage";
 import VerificationFlowPage from "@/pages/auth/VerificationFlowPage";
 import XhsConsolePage from "@/pages/xhs/console";
+import SocialConsolePage from "@/pages/social/console";
 
 function AuthNavigation() {
   const { t } = useTranslation();
@@ -20,6 +21,7 @@ function AuthNavigation() {
       <nav className="brand-nav" aria-label={t("navigation.currentSession")}>
         <span className="brand-nav__identity">{identity.displayName}</span>
         <Link to="/xhs">{t("navigation.xhsConsole")}</Link>
+        <Link to="/social">Social console</Link>
         <Link to="/settings">{t("navigation.accountSettings")}</Link>
         <button
           className="brand-nav__button"
@@ -70,6 +72,7 @@ export default function App() {
           <Route path="/verification" element={<VerificationFlowPage />} />
           <Route path="/settings" element={<AccountSettingsPage />} />
           <Route path="/xhs" element={<XhsConsolePage />} />
+          <Route path="/social" element={<SocialConsolePage />} />
           <Route path="*" element={<SessionPage />} />
         </Routes>
       </main>
