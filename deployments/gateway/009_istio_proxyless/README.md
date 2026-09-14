@@ -282,3 +282,44 @@ kubectl -n ddd-learn-proxyless get deployment,service,pod \
 当前验证结果为 1 个 Pod Ready，容器名为 `xhs` 是通用 Chart 的容器名称；Pod 没有
 `istio-proxy`，并带有 `ambient.istio.io/redirection=enabled`。后续接入 Social Gateway
 路由和真实 XHS Kitex Client 时，再增加对应的 descriptor、HTTPRoute 和 xDS 配置。
+
+## 第七步：接入 Social HTTP/JSON Gateway 路由
+
+本步骤将 Social 的两个 gRPC RPC 暴露为 HTTP/JSON：
+
+```text
+GET /v1/social/me/organizations
+GET /v1/social/organizations/{organization_id}/contents?keyword=golang
+```
+
+生成 descriptor 和 Transcoder：
+
+```bash
+cd social_grpc
+make descriptor
+make transcoder-filter
+```
+
+其中 `transcoder/social.pb` 保存 Social service、RPC、message 和 HTTP annotation；
+`ingress/social-grpc-transcoder.yaml` 将该 descriptor 内联到只匹配
+`istio-ingress` Gateway Pod 的 Envoy HTTP Filter Chain。
+
+应用路由和 Filter：
+
+```bash
+kubectl apply -f deployments/gateway/009_istio_proxyless/ingress/istio-ingress-routes.yaml
+kubectl apply -f deployments/gateway/009_istio_proxyless/ingress/social-grpc-transcoder.yaml
+```
+
+`HTTPRoute/istio-social-service` 将 `/v1/social` 请求转发到
+`social-grpc-service:80`；Transcoder 再将 HTTP/JSON 转换成 `SocialService` gRPC 调用。
+当前返回的是 Mock Provider 内容，且 Social 尚未加入 Oathkeeper 认证规则，因此该步骤的
+验证请求可以直接返回 `200`。认证、Internal JWT 和真实 XHS Client 在后续步骤单独接入。
+
+验证：
+
+```bash
+curl 'http://192.168.2.41:30425/v1/social/organizations/G/contents?keyword=golang'
+```
+
+预期返回包含 `platform: xhs` 的模拟内容。

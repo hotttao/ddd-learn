@@ -81,3 +81,22 @@ spec:
       backendRefs:
         - name: xhs-grpc-service
           port: 80
+---
+# Social 聚合接口保留 /v1/social 前缀，Transcoder 将其转换为 SocialService gRPC 调用。
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: istio-social-service
+  namespace: ddd-learn-proxyless
+spec:
+  parentRefs:
+    - name: istio-ingress
+      sectionName: http
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /v1/social
+      backendRefs:
+        - name: social-grpc-service
+          port: 80
