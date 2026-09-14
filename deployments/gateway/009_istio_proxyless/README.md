@@ -323,3 +323,24 @@ curl 'http://192.168.2.41:30425/v1/social/organizations/G/contents?keyword=golan
 ```
 
 预期返回包含 `platform: xhs` 的模拟内容。
+
+## 第八步：为 Social API 启用 Oathkeeper ext_authz
+
+Oathkeeper 的 `accessRules` 已使用 `/v1/<...>` 规则覆盖 Social，但 Istio Gateway 的
+`AuthorizationPolicy` 还必须把 `/v1/social` 加入 CUSTOM ext_authz 的路径列表。否则请求
+虽然有 Oathkeeper 规则，也不会从 Istio Gateway 发起 ext_authz 请求。
+
+应用策略：
+
+```bash
+kubectl apply -f deployments/gateway/009_istio_proxyless/security/authorization-policy-ingress-oathkeeper.yaml
+```
+
+未登录请求验证：
+
+```bash
+curl -i 'http://192.168.2.41:30425/v1/social/organizations/G/contents?keyword=golang'
+```
+
+预期返回 `401`。这证明请求已经进入 Oathkeeper 认证链；Social Handler 的 JWT 解析和
+用户组织/Keto 权限校验仍在后续步骤实现。

@@ -21,3 +21,5 @@ spec:
             paths:
               - /v1/xhs
               - /v1/xhs/*
+              - /v1/social
+              - /v1/social/*
