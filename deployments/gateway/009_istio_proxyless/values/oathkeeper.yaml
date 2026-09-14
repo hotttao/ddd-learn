@@ -1,4 +1,4 @@
-# Istio Sidecar/Proxyless 实验的 Oathkeeper values；部署到 ddd-learn-sidecar。
+# Istio Ambient/Proxyless 实验的 Oathkeeper values；部署到 ddd-learn-proxyless。
 fullnameOverride: oathkeeper
 replicaCount: 1
 demo: false

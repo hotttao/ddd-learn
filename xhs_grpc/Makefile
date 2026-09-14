@@ -50,13 +50,13 @@ transcoder-filter: descriptor
 		echo 'apiVersion: networking.istio.io/v1alpha3'; \
 		echo 'kind: EnvoyFilter'; \
 		echo 'metadata:'; \
-		echo '  # metadata.name 是 EnvoyFilter 在 ddd-learn-sidecar namespace 中的唯一名称。'; \
+		echo '  # metadata.name 是 EnvoyFilter 在 ddd-learn-proxyless namespace 中的唯一名称。'; \
 		echo '  name: xhs-grpc-json-transcoder'; \
-		echo '  # 该配置只在 ddd-learn-sidecar namespace 内生效。'; \
-		echo '  namespace: ddd-learn-sidecar'; \
+		echo '  # 该配置只在 ddd-learn-proxyless namespace 内生效。'; \
+		echo '  namespace: ddd-learn-proxyless'; \
 		echo 'spec:'; \
 		echo '  # 只匹配 Istio Gateway Controller 为 istio-ingress 创建的数据面 Pod。'; \
-		echo '  # 因此 Ory 和 xhs 的 Sidecar Envoy 不会加载这个 HTTP Filter。'; \
+		echo '  # 因此没有 Envoy Sidecar 的 Ambient 业务 Pod 不会加载这个 HTTP Filter。'; \
 		echo '  workloadSelector:'; \
 		echo '    labels:'; \
 		echo '      gateway.networking.k8s.io/gateway-name: istio-ingress'; \

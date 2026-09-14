@@ -22,6 +22,7 @@ toc:
 5. 当前 Kitex Proxyless 相比 Envoy Sidecar 缺少哪些能力？
 6. Proxyless 能否结合 Ambient，组合后的请求链是什么？
 7. Ambient 能补充 Proxyless 的哪些缺失能力，又有哪些仍然补不了？
+8. Istio 会不会把使用 Proxyless 的 Pod 当成 Sidecar Pod，从而不再使用 ztunnel？
 
 ## 先回答三个问题
 
@@ -142,6 +143,81 @@ Social -> Kitex Proxyless + ztunnel -> XHS
 ```
 
 Ingress 负责南北向认证与协议转换；Proxyless 和 Ambient 负责 Social 到 XHS 的东西向调用。
+
+#### Proxyless Pod、Sidecar Pod 和 Ambient Pod 如何判定
+
+Istio **不会检测应用是否创建了 xDS Client 来判定数据面模式**。Kitex 连接 istiod、订阅 xDS，
+只表示应用进程正在使用 Proxyless；它不会让 Kubernetes Pod 自动获得 Sidecar 身份，也不会自动
+退出 Ambient。
+
+三种机制的判断依据彼此独立：
+
+| 机制 | Istio/Kubernetes 根据什么判断 |
+| --- | --- |
+| Proxyless | 应用代码是否初始化 xDS Client，并把它接入 RPC Client/Server |
+| Sidecar | Pod 是否被 Admission Webhook 注入 `istio-proxy` 容器和相关网络配置 |
+| Ambient | namespace/Pod 是否通过 `istio.io/dataplane-mode=ambient` 注册，且该 Pod 没有使用 Sidecar 数据面 |
+
+所以，一个使用 Proxyless 的 Pod 最终走哪条网络路径，仍由 Sidecar 注入和 Ambient enrollment
+决定：
+
+| 应用内 Proxyless | 注入 Sidecar | 注册 Ambient | 实际执行路径 |
+| --- | --- | --- | --- |
+| 是 | 否 | 否 | 纯 Proxyless；没有 ztunnel 提供的 Istio mTLS 和 L4 授权 |
+| 是 | 是 | 任意 | Proxyless + Envoy Sidecar；Sidecar 数据面优先，不再由 ztunnel重复接管 |
+| 是 | 否 | 是 | Proxyless + ztunnel；推荐的无 Sidecar 组合 |
+| 否 | 否 | 是 | 普通 Ambient 工作负载，由 ztunnel 和可选 Waypoint治理 |
+
+`Proxyless + Sidecar` 在技术上可以启动，但通常不应该这样配置：
+
+```text
+Kitex Proxyless
+  -> 已经选择 Endpoint、执行客户端超时/重试
+  -> Envoy Sidecar 再次透明拦截
+  -> 可能再次路由、超时、重试和熔断
+```
+
+这会让同一项 L7 策略出现两个执行者。Istio 之所以把该 Pod 视为 Sidecar 工作负载，是因为它
+包含注入的 `istio-proxy`，不是因为它使用了 Proxyless。
+
+Sidecar 与 Ambient 可以在同一个 Mesh，甚至迁移期间出现在同一个 namespace，但对单个 Pod
+正常情况下只选择一套透明数据面：
+
+```text
+Sidecar Pod：应用 -> Envoy Sidecar -> 网络
+Ambient Pod：应用 -> 节点 ztunnel -> 网络
+```
+
+当 namespace 同时带有 Sidecar injection 标签和 Ambient 标签时，Sidecar 注入优先；已经注入
+`istio-proxy` 的 Pod 不会再由 ztunnel 重复捕获。长期配置不建议依赖两个互相竞争的 namespace
+标签，应使用独立 namespace，或者明确移除 Sidecar injection 标签后再迁移到 Ambient。
+
+两类工作负载之间仍然可以互相调用：
+
+```text
+Sidecar -> Ambient：应用 -> 源 Envoy -> mTLS -> 目标 ztunnel -> 应用
+Ambient -> Sidecar：应用 -> 源 ztunnel -> mTLS -> 目标 Envoy -> 应用
+```
+
+因此，“集群安装了 Ambient”不等于“所有无 Sidecar Pod 都自动使用 ztunnel”。Pod 所在
+namespace 还必须注册到 Ambient。以当前 009 实验为例：
+
+```text
+namespace ddd-learn-proxyless
+  -> 没有 istio-injection=enabled
+  -> istio.io/dataplane-mode=ambient
+
+Social Pod 启用 Kitex Proxyless
+  -> 不会注入 Sidecar
+  -> 同时被 ztunnel 接管 L4 流量
+  -> 当前实际是 Proxyless + Ambient
+```
+
+最终路径是：
+
+```text
+Social Kitex Proxyless -> 源 ztunnel -> 目标数据面 -> XHS
+```
 
 ### 问题三：Ambient 能给 Proxyless 补充什么
 
@@ -421,7 +497,7 @@ Client                                  xDS Server
 应用使用 xDS URI，而不是普通 DNS URI：
 
 ```go
-conn, err := grpc.NewClient("xds:///xhs-service.ddd-learn.svc.cluster.local")
+conn, err := grpc.NewClient("xds:///xhs-grpc-service.ddd-learn-proxyless.svc.cluster.local")
 ```
 
 启动前通过环境变量提供 bootstrap：

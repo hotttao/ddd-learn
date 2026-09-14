@@ -37,7 +37,7 @@ livenessProbe:
 
 readinessProbe:
   httpGet: null
-  # Sidecar 注入会把探针改写给 pilot-agent，再由它检查应用容器。
+  # Ambient 不注入 Sidecar，kubelet 直接调用应用提供的标准 gRPC Health Service。
   grpc:
     port: 8090
   initialDelaySeconds: 5

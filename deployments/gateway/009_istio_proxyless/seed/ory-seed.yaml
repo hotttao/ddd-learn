@@ -1,4 +1,4 @@
-# Istio Sidecar/Proxyless 实验的开发数据初始化。
+# Istio Ambient/Proxyless 实验的开发数据初始化。
 #
 # 这些资源只负责向已经部署好的 Kratos/Keto 写入教学数据：
 # - Secret 保存两个演示账号的密码；
@@ -10,7 +10,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: ory-seed-credentials
-  namespace: ddd-learn-sidecar
+  namespace: ddd-learn-proxyless
 type: Opaque
 stringData:
   # 仅用于本地教学环境，生产环境不能把初始密码提交到仓库。
@@ -21,7 +21,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: kratos-seed-script
-  namespace: ddd-learn-sidecar
+  namespace: ddd-learn-proxyless
 data:
   seed-identities.sh: |
     #!/bin/sh
@@ -144,13 +144,11 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: kratos-seed
-  namespace: ddd-learn-sidecar
+  namespace: ddd-learn-proxyless
 spec:
   backoffLimit: 6
   template:
     metadata:
-      annotations:
-        sidecar.istio.io/inject: "false"
       labels:
         app.kubernetes.io/name: kratos-seed
     spec:
@@ -184,7 +182,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: keto-seed-script
-  namespace: ddd-learn-sidecar
+  namespace: ddd-learn-proxyless
 data:
   seed-relations.sh: |
     #!/bin/sh
@@ -308,13 +306,11 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: keto-seed
-  namespace: ddd-learn-sidecar
+  namespace: ddd-learn-proxyless
 spec:
   backoffLimit: 6
   template:
     metadata:
-      annotations:
-        sidecar.istio.io/inject: "false"
       labels:
         app.kubernetes.io/name: keto-seed
     spec:

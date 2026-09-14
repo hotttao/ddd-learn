@@ -23,7 +23,7 @@ data:
     extensionProviders:
     - name: oathkeeper
       envoyExtAuthzHttp:
-        service: oathkeeper-api.ddd-learn-sidecar.svc.cluster.local
+        service: oathkeeper-api.ddd-learn-proxyless.svc.cluster.local
         port: 4456
         pathPrefix: /decisions
         timeout: 2s

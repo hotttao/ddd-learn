@@ -1,8 +1,9 @@
-# 009 Proxyless 实验使用独立 namespace，不继承 006 的 Ambient enrollment。
-# istio-injection=enabled 表示新建 Pod 默认注入 Envoy Sidecar。
+# 009 Proxyless 实验使用独立 namespace，避免与 006 的资源和数据互相影响。
+# dataplane-mode=ambient 将没有 Sidecar 的 Pod 注册到 ztunnel 数据面；应用内是否启用
+# Proxyless xDS Client 与该标签无关，两者分别负责 L7 和 L4。
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: ddd-learn-sidecar
+  name: ddd-learn-proxyless
   labels:
-    istio-injection: enabled
+    istio.io/dataplane-mode: ambient

@@ -1,8 +1,9 @@
 # Gateway 009：Istio Proxyless
 
 本实验从 `deployments/gateway/006_istio_ambient` 选择性继承服务配置，但运行在独立的
-`ddd-learn-sidecar` namespace。该 namespace 使用传统 Istio Sidecar 模式，避免 009 的
-Proxyless 实验继续受 006 Ambient 数据面的影响。
+`ddd-learn-proxyless` namespace。该 namespace 注册到 Istio Ambient：应用内的 Kitex
+Proxyless Client 负责客户端 L7 治理，节点 ztunnel 负责透明 mTLS、工作负载身份和 L4 授权。
+本实验不为 XHS 绑定 Waypoint，避免与 Proxyless 重复执行客户端 L7 策略。
 
 ## 第一步：XHS 视角的 xDS 兼容性探针
 
@@ -26,7 +27,7 @@ NDS 的 NameTable 是一个整体资源，不能按单个服务订阅；CDS、ED
 
 | 目录 | 内容 |
 | --- | --- |
-| `base/` | Sidecar namespace、Mailpit 和 UI |
+| `base/` | Ambient namespace、Mailpit 和 UI |
 | `ingress/` | Istio Ingress、HTTPRoute 和 gRPC Transcoder |
 | `postgres/` | CloudNativePG Cluster |
 | `keto/`、`seed/`、`values/` | Ory、数据库初始化和 Helm values |
@@ -40,7 +41,7 @@ NDS 的 NameTable 是一个整体资源，不能按单个服务订阅；CDS、ED
 目标服务通过 `probe.yaml` 配置：
 
 ```yaml
-TARGET_SERVICE: xhs-service.ddd-learn-sidecar.svc.cluster.local
+TARGET_SERVICE: xhs-grpc-service.ddd-learn-proxyless.svc.cluster.local
 TARGET_PORT: "80"
 TARGET_SUBSETS: v1,v2
 ```
@@ -60,7 +61,7 @@ docker save -o /tmp/ddd-learn-kitex-xds-compatibility-0.0.1.tar \
 sudo k3s ctr -n k8s.io images import \
   /tmp/ddd-learn-kitex-xds-compatibility-0.0.1.tar
 kubectl apply -f probe.yaml
-kubectl logs -n ddd-learn-sidecar pod/kitex-xds-compatibility
+kubectl logs -n ddd-learn-proxyless pod/kitex-xds-compatibility
 ```
 
 ### 判断结果
@@ -68,9 +69,9 @@ kubectl logs -n ddd-learn-sidecar pod/kitex-xds-compatibility
 成功时日志会分别输出：
 
 ```text
-NDS target service=xhs-service.ddd-learn-sidecar.svc.cluster.local ips=[...]
-CDS resource names=[outbound|80||xhs-service..., outbound|80|v1|xhs-service..., ...]
-EDS resource names=[outbound|80||xhs-service..., ...]
+NDS target service=xhs-grpc-service.ddd-learn-proxyless.svc.cluster.local ips=[...]
+CDS resource names=[outbound|80||xhs-grpc-service..., outbound|80|v1|xhs-grpc-service..., ...]
+EDS resource names=[outbound|80||xhs-grpc-service..., ...]
 compatibility gate passed: [...]
 ```
 
@@ -96,23 +97,23 @@ sudo k3s ctr -n k8s.io images import /tmp/xhs_grpc-0.0.1.tar
 
 ```bash
 helm upgrade --install xhs-grpc deployments/gateway/helm/xhs \
-  --namespace ddd-learn-sidecar \
+  --namespace ddd-learn-proxyless \
   --values deployments/gateway/009_istio_proxyless/values/xhs-grpc.yaml
 ```
 
 验证资源和 gRPC Probe：
 
 ```bash
-kubectl -n ddd-learn-sidecar get pods -l 'app.kubernetes.io/instance=xhs-grpc'
-kubectl -n ddd-learn-sidecar get service xhs-grpc-service
-kubectl -n ddd-learn-sidecar get endpointslice \
+kubectl -n ddd-learn-proxyless get pods -l 'app.kubernetes.io/instance=xhs-grpc'
+kubectl -n ddd-learn-proxyless get service xhs-grpc-service
+kubectl -n ddd-learn-proxyless get endpointslice \
   -l kubernetes.io/service-name=xhs-grpc-service -o wide
-kubectl -n ddd-learn-sidecar describe pod -l 'app.kubernetes.io/instance=xhs-grpc'
+kubectl -n ddd-learn-proxyless describe pod -l 'app.kubernetes.io/instance=xhs-grpc'
 ```
 
-`xhs-grpc-service` 不绑定 Waypoint，Pod 由 `ddd-learn-sidecar` 的注入标签添加 Envoy
-Sidecar。后续 Social 启用 Proxyless xDS 时只对 Social 关闭注入，使 Kitex Client 成为其
-唯一的 outbound L7 执行点。
+`xhs-grpc-service` 不绑定 Waypoint，Pod 也不注入 Envoy Sidecar；namespace 的 Ambient 标签
+使其网络流量由节点 ztunnel 接管。后续 Social 启用 Proxyless xDS 后，Kitex Client 是客户端
+outbound L7 的唯一执行者，ztunnel 只执行 L4 安全与转发。
 
 Kitex Server 保留默认协议探测器，由它根据 HTTP/2 preface 选择 gRPC 的 nphttp2
 处理路径；不要直接用 `WithTransHandlerFactory(nphttp2.NewSvrTransHandlerFactory())`
@@ -185,7 +186,7 @@ match_incoming_request_route: true
 
 ```bash
 kubectl apply -f deployments/gateway/009_istio_proxyless/ingress/xhs-grpc-transcoder.yaml
-curl -b /tmp/alice-sidecar-cookies.txt \
+curl -b /tmp/alice-proxyless-cookies.txt \
   http://192.168.2.41:30425/v1/xhs/me/organizations
 ```
 
@@ -240,5 +241,5 @@ Kratos Session Cookie
 | Bob 修改关键词 | `403` |
 | 未携带 Kratos Session 请求 XHS API | `401` |
 
-两个 `xhs-grpc-service` Pod 均为 `2/2 Ready`，说明 Kubernetes 原生 gRPC Probe 能通过各
-Pod 的 Sidecar 调用 `grpc.health.v1.Health/Check`。
+两个 `xhs-grpc-service` Pod 均为 Ready，说明 Kubernetes 原生 gRPC Probe 可以直接调用各
+Pod 的 `grpc.health.v1.Health/Check`；Ambient 不需要将 Probe 改写给 Sidecar。

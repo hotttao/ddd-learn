@@ -4,7 +4,7 @@ apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
   name: istio-ingress-oathkeeper
-  namespace: ddd-learn-sidecar
+  namespace: ddd-learn-proxyless
 spec:
   targetRefs:
     # CUSTOM 绑定到由 Istio 管理的 Gateway Envoy，不下发给普通业务 Sidecar。

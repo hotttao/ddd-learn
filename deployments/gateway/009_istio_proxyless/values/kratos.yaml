@@ -1,4 +1,4 @@
-# Istio Sidecar/Proxyless 实验的 Kratos values；部署到 ddd-learn-sidecar。
+# Istio Ambient/Proxyless 实验的 Kratos values；部署到 ddd-learn-proxyless。
 fullnameOverride: kratos
 replicaCount: 1
 
@@ -21,14 +21,62 @@ kratos:
   automigration:
     enabled: true
     type: job
-  identitySchemas: {}
+  # Chart 将该 JSON Schema 写入 kratos-config ConfigMap，并挂载到 /etc/config。
+  # 新 namespace 不能依赖其他实验遗留的 ConfigMap，因此在 values 中完整声明。
+  identitySchemas:
+    "identity.default.schema.json": |
+      {
+        "$id": "https://schemas.ory.sh/ddd-learn/001-auth/identity.schema.json",
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "Person",
+        "type": "object",
+        "properties": {
+          "traits": {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": "string",
+                "format": "email",
+                "title": "E-Mail",
+                "minLength": 3,
+                "ory.sh/kratos": {
+                  "credentials": {"password": {"identifier": true}},
+                  "verification": {"via": "email"},
+                  "recovery": {"via": "email"}
+                }
+              },
+              "phone": {
+                "type": "string",
+                "format": "tel",
+                "title": "Phone number",
+                "minLength": 3,
+                "ory.sh/kratos": {
+                  "credentials": {"code": {"identifier": true, "via": "sms"}}
+                }
+              },
+              "name": {
+                "type": "object",
+                "properties": {
+                  "first": {"type": "string", "title": "First Name"},
+                  "last": {"type": "string", "title": "Last Name"}
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": ["email"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["traits"],
+        "additionalProperties": false
+      }
   config:
     dsn: postgres://ory:ory@ddd-learn-postgres-rw:5432/ory?sslmode=disable
     identity:
       default_schema_id: default
       schemas:
         - id: default
-          url: file:///etc/config/default
+          url: file:///etc/config/identity.default.schema.json
 
     serve:
       public:
@@ -117,9 +165,3 @@ service:
 
 serviceMonitor:
   enabled: true
-
-# 迁移 Job 是一次性任务；若注入长期运行的 Envoy Sidecar，业务容器完成后 Job 仍不会结束。
-job:
-  podMetadata:
-    annotations:
-      sidecar.istio.io/inject: "false"

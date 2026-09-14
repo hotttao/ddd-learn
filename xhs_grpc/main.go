@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/cloudwego/kitex/pkg/endpoint"
+	// Register Kitex's gRPC gzip compressor for Kubernetes' native gRPC Probe.
+	_ "github.com/cloudwego/kitex/pkg/remote/codec/protobuf/encoding/gzip"
 	kitexmetadata "github.com/cloudwego/kitex/pkg/remote/trans/nphttp2/metadata"
 	"github.com/cloudwego/kitex/pkg/rpcinfo"
 	"github.com/cloudwego/kitex/server"
