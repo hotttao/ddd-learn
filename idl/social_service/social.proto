@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package social_service;
+
+import "google/api/annotations.proto";
+
+option go_package = "social_service";
+
+// SocialService 是面向前端的聚合查询接口。
+// 当前实现只接入 XHS，未来可以在服务内部增加其他平台 Provider。
+service SocialService {
+  rpc ListMyOrganizations(ListMyOrganizationsRequest) returns (ListMyOrganizationsResponse) {
+    option (google.api.http) = {get: "/v1/social/me/organizations"};
+  }
+
+  rpc SearchContents(SearchContentsRequest) returns (SearchContentsResponse) {
+    option (google.api.http) = {
+      get: "/v1/social/organizations/{organization_id}/contents"
+    };
+  }
+}
+
+message ListMyOrganizationsRequest {}
+
+message ListMyOrganizationsResponse {
+  repeated OrganizationMembership organizations = 1;
+}
+
+message OrganizationMembership {
+  string id = 1;
+  repeated string roles = 2;
+}
+
+message SearchContentsRequest {
+  string organization_id = 1;
+  string keyword = 2;
+}
+
+message SearchContentsResponse {
+  repeated SocialContent contents = 1;
+}
+
+message SocialContent {
+  string id = 1;
+  string title = 2;
+  string source_keyword = 3;
+  string platform = 4;
+}
