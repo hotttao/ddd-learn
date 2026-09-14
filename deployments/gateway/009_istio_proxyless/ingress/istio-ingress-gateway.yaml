@@ -1,4 +1,4 @@
-# Istio Ambient 实验的外部入口。
+# Istio Sidecar/Proxyless 实验的外部入口。
 #
 # 这是 Gateway API Gateway，但由 Istio Gateway Controller 管理：
 #   GatewayClass/istio -> controllerName: istio.io/gateway-controller
@@ -7,7 +7,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: istio-ingress
-  namespace: ddd-learn
+  namespace: ddd-learn-sidecar
   annotations:
     # Istio 自动生成的 Service 只作为集群内部服务；外部固定端口由下方
     # istio-ingress-nodeport Service 明确声明，避免 NodePort 被随机分配。
@@ -29,7 +29,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: istio-ingress-nodeport
-  namespace: ddd-learn
+  namespace: ddd-learn-sidecar
   labels:
     app.kubernetes.io/name: istio-ingress
     app.kubernetes.io/component: gateway

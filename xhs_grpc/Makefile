@@ -50,13 +50,13 @@ transcoder-filter: descriptor
 		echo 'apiVersion: networking.istio.io/v1alpha3'; \
 		echo 'kind: EnvoyFilter'; \
 		echo 'metadata:'; \
-		echo '  # metadata.name 是 EnvoyFilter 在 ddd-learn namespace 中的唯一名称。'; \
+		echo '  # metadata.name 是 EnvoyFilter 在 ddd-learn-sidecar namespace 中的唯一名称。'; \
 		echo '  name: xhs-grpc-json-transcoder'; \
-		echo '  # 该配置只在 ddd-learn namespace 内生效。'; \
-		echo '  namespace: ddd-learn'; \
+		echo '  # 该配置只在 ddd-learn-sidecar namespace 内生效。'; \
+		echo '  namespace: ddd-learn-sidecar'; \
 		echo 'spec:'; \
 		echo '  # 只匹配 Istio Gateway Controller 为 istio-ingress 创建的数据面 Pod。'; \
-		echo '  # 因此 Ory、xhs Pod 和 Ambient ztunnel 不会加载这个 HTTP Filter。'; \
+		echo '  # 因此 Ory 和 xhs 的 Sidecar Envoy 不会加载这个 HTTP Filter。'; \
 		echo '  workloadSelector:'; \
 		echo '    labels:'; \
 		echo '      gateway.networking.k8s.io/gateway-name: istio-ingress'; \
@@ -90,6 +90,9 @@ transcoder-filter: descriptor
 		echo '            services:'; \
 		echo '              - xhs_service.crawl.CrawlService'; \
 		echo '              - xhs_service.organization.OrganizationService'; \
+		echo '            # 使用转码前的 HTTP path 选择 HTTPRoute 后端。否则转码后的'; \
+		echo '            # /<package>.<service>/<method> 会重新匹配到兜底的 / 路由。'; \
+		echo '            match_incoming_request_route: true'; \
 		echo '            # 保留 proto 字段原名，例如 organization_id，而不是转换成 organizationId。'; \
 		echo '            print_options:'; \
 		echo '              preserve_proto_field_names: true'; \

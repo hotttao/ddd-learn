@@ -1,13 +1,8 @@
 apiVersion: v1
-kind: Namespace
-metadata:
-  name: ddd-learn
----
-apiVersion: v1
 kind: Secret
 metadata:
   name: ddd-learn-postgres-credentials
-  namespace: ddd-learn
+  namespace: ddd-learn-sidecar
 type: kubernetes.io/basic-auth
 stringData:
   username: ory
@@ -17,7 +12,7 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: ddd-learn-postgres
-  namespace: ddd-learn
+  namespace: ddd-learn-sidecar
 spec:
   instances: 1
   imageName: ghcr.io/cloudnative-pg/postgresql:16

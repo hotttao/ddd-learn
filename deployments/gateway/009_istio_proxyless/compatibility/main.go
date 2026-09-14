@@ -28,7 +28,7 @@ import (
 const defaultIstiodAddress = "istiod.istio-system.svc:15010"
 
 const (
-	defaultTargetService = "xhs-service.ddd-learn.svc.cluster.local"
+	defaultTargetService = "xhs-service.ddd-learn-sidecar.svc.cluster.local"
 	defaultTargetPort    = 80
 )
 

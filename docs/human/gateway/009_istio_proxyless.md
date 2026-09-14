@@ -2,7 +2,7 @@
 
 ## 目标
 
-在当前 Istio Ambient 架构中增加一条 Kitex gRPC 调用链，理解 RPC 框架如何直接消费 Istio
+在独立的 Istio Sidecar 实验 namespace 中增加一条 Kitex gRPC 调用链，理解 RPC 框架如何直接消费 Istio
 下发的 xDS 配置：
 
 ```text
@@ -71,11 +71,12 @@ Social Kitex Client
 XHS 使用 Kitex gRPC Server 只代表它可以接收 Kitex gRPC 请求，不代表它具备与 gRPC-Go
 `xds.NewGRPCServer()` 相同的 LDS、RDS、RBAC 等完整 Inbound 能力。
 
-### Ambient 与 Proxyless 的分工
+### Sidecar 与 Proxyless 的实验边界
 
-本实验保留 Ambient 的 ztunnel，用于透明 L4 mTLS 和 workload identity；Social 的 Kitex Client
-负责服务发现、路由和熔断。XHS 不绑定 Waypoint，避免同一条调用同时由 Kitex Client 和
-Waypoint 执行 L7 路由或重试。
+本实验使用独立的 `ddd-learn-sidecar` namespace，并通过 `istio-injection=enabled` 使用传统
+Sidecar 数据面。Ory、Ingress 后端和 XHS Server 可以使用 Envoy Sidecar；第八步为 Social
+启用 Proxyless xDS 时，单独对 Social Pod 设置 `sidecar.istio.io/inject: "false"`。这样只有
+Social Outbound 由 Kitex 执行 xDS 路由和熔断，不会再由 Envoy Sidecar重复执行。
 
 ## 步骤
 
@@ -84,10 +85,10 @@ Waypoint 执行 L7 路由或重试。
 
 ### 第一步：建立实验基线并验证版本兼容性
 
-1. 从 `deployments/gateway/006_istio_ambient` 复制本实验仍需要的 Ambient、Ory、PostgreSQL、
+1. 从 `deployments/gateway/006_istio_ambient` 复制本实验仍需要的 Ory、PostgreSQL、
    Ingress 和基础 Helm values 到 `deployments/gateway/009_istio_proxyless`。
 2. 不复制 006 的历史 README 内容，为 009 新建只记录本实验操作的 README。
-3. 保持 `ddd-learn` namespace、入口地址和现有端口不变。
+3. 使用独立的 `ddd-learn-sidecar` namespace，入口地址和现有 NodePort 保持不变。
 4. 记录当前 Istio、Kitex 和 `kitex-contrib/xds` 版本。
 5. 使用最小 Kitex Client 验证能否连接当前 istiod、完成 ADS 握手并收到 LDS/RDS/CDS/EDS；
    不在兼容性未确认前重构业务服务。
@@ -130,11 +131,11 @@ Internal JWT 被拒绝，Keto 授权结果保持不变。
 2. 更新 `Service/xhs-service`，为 gRPC 端口设置稳定名称和 `appProtocol`。
 3. 将 HTTP 健康检查替换为 Kubernetes gRPC Probe。
 4. 部署至少两个 XHS Pod，确认 EndpointSlice 包含两个 gRPC Endpoint。
-5. 移除 XHS Service 的 Waypoint 绑定，但保留 namespace 的 Ambient enrollment。
+5. 不创建 Waypoint；XHS Server 由 namespace 的 Sidecar 注入策略管理。
 6. 暂不修改外部 XHS HTTPRoute；Gateway 转码在下一步单独实现。
 
 验证：Pod Ready、Service 和 EndpointSlice 正确；集群内固定地址 Kitex Client 能通过
-`xhs-service` 调用 RPC；Pod 之间的网络仍由 Ambient ztunnel 接管。
+`xhs-service` 调用 RPC；Pod 不带 Ambient redirection，Sidecar 注入状态符合本步骤约定。
 
 提交边界：只提交 XHS 的镜像和 Kubernetes 接入配置。
 
@@ -210,7 +211,7 @@ Social Application Service
 
 1. 在 Social 启动时调用 `xds.Init()`。
 2. 创建 XHS Kitex Client 时使用 gRPC Transport 和 `xdssuite.NewClientOption()`。
-3. 目标服务使用 `xhs-service.ddd-learn.svc.cluster.local:<grpc-port>`，不写 Pod IP。
+3. 目标服务使用 `xhs-service.ddd-learn-sidecar.svc.cluster.local:<grpc-port>`，不写 Pod IP。
 4. 通过 Downward API 注入 `POD_NAMESPACE`、`POD_NAME` 和 `INSTANCE_IP`，并声明
    `KITEX_XDS_METAS`、istiod 地址及认证参数。
 5. 使用声明式 Istio 配置为 XHS 内容查询方法生成 RDS/CDS/EDS 配置；RDS 方法路径必须来自
@@ -222,7 +223,7 @@ Social Application Service
 1. Social 日志显示 xDS 初始化和资源更新成功。
 2. 连续调用 Social API 时，两个 XHS Pod 都能收到请求。
 3. 删除并重建一个 XHS Pod 后，Social 不重启也能使用新的 Endpoint。
-4. Social 和 XHS Pod 中都没有 Envoy Sidecar 容器。
+4. Social Pod 没有 Envoy Sidecar；XHS Server 可以保留 Sidecar，证明 Proxyless Client 能调用传统 Sidecar 工作负载。
 
 提交边界：只提交 Proxyless xDS Client 和所需的声明式 Istio/Kubernetes 配置。
 
@@ -260,15 +261,15 @@ Social Application Service
 
 提交边界：只提交熔断配置、Social Client 选项和验证记录。
 
-### 第十一步：对比 Proxyless、Waypoint 与 Ambient L4
+### 第十一步：对比 Proxyless Client 与 Envoy Sidecar
 
-1. 记录一次完整请求中 Ingress、Oathkeeper、Social、ztunnel 和 XHS 的职责。
-2. 对比 Kitex Client 熔断与 Waypoint 熔断的执行位置，确认本实验没有重复重试或重复熔断。
+1. 记录一次完整请求中 Ingress、Oathkeeper、Social Proxyless Outbound、XHS Sidecar Inbound 和 XHS 的职责。
+2. 对比 Kitex Client 熔断与 Envoy Sidecar Outbound 熔断的执行位置，确认 Social 没有重复重试或重复熔断。
 3. 说明 `kitex-contrib/xds` 当前未实现的能力，不能仅因为收到了 xDS Resource 就宣称支持。
 4. 恢复故障配置，保留可重复执行但默认关闭的测试 Manifest。
 
 验证：README 能通过命令和观测结果证明 xDS Resource 由 Social 消费、熔断由 Social 进程执行、
-Ambient 只负责本实验中的 L4 传输安全。
+Social 的 xDS Resource 由应用进程消费，XHS 的入站流量由 Sidecar 承接。
 
 提交边界：只提交最终验证记录和默认关闭的测试配置。
 
@@ -280,7 +281,7 @@ Ambient 只负责本实验中的 L4 传输安全。
 4. UI 可以选择组织和关键词访问 Social，并显示故障、超时和熔断结果。
 5. Social 的 Kitex Client 不依赖 Sidecar，能够通过 xDS 获得 XHS Endpoint 更新。
 6. 能从日志和请求现象区分真实 XHS 故障、实例级熔断和服务级熔断。
-7. 能解释 Proxyless Outbound、XHS Inbound、Ambient ztunnel 和入口 Gateway 的职责边界。
+7. 能解释 Proxyless Outbound、XHS Sidecar Inbound 和入口 Gateway 的职责边界。
 
 ## 风险与停止条件
 

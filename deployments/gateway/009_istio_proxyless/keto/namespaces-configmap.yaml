@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: keto-namespaces
-  namespace: ddd-learn
+  namespace: ddd-learn-sidecar
 data:
   namespaces.ts: |
     import { Namespace, Context, SubjectSet } from "@ory/keto-namespace-types"

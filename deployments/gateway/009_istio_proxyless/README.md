@@ -1,7 +1,8 @@
 # Gateway 009：Istio Proxyless
 
-本实验从 `deployments/gateway/006_istio_ambient` 选择性继承可运行基线，后续逐步将 XHS 和
-Social 改造成 Kitex Proxyless xDS 服务。
+本实验从 `deployments/gateway/006_istio_ambient` 选择性继承服务配置，但运行在独立的
+`ddd-learn-sidecar` namespace。该 namespace 使用传统 Istio Sidecar 模式，避免 009 的
+Proxyless 实验继续受 006 Ambient 数据面的影响。
 
 ## 第一步：XHS 视角的 xDS 兼容性探针
 
@@ -25,11 +26,11 @@ NDS 的 NameTable 是一个整体资源，不能按单个服务订阅；CDS、ED
 
 | 目录 | 内容 |
 | --- | --- |
-| `base/` | Ambient namespace、测试 workload、Mailpit 和 UI |
-| `ingress/` | Istio Ingress、HTTPRoute 和 XHS Waypoint |
+| `base/` | Sidecar namespace、Mailpit 和 UI |
+| `ingress/` | Istio Ingress、HTTPRoute 和 gRPC Transcoder |
 | `postgres/` | CloudNativePG Cluster |
 | `keto/`、`seed/`、`values/` | Ory、数据库初始化和 Helm values |
-| `security/` | Oathkeeper ext_authz、XHS 授权和 Istio Mesh 配置 |
+| `security/` | Oathkeeper ext_authz 和 Istio Mesh 配置 |
 
 没有复制 006 的 `traffic/`，因为其中的 v1/v2 灰度、Waypoint Retry 和旧故障注入不属于
 本实验基线。
@@ -39,7 +40,7 @@ NDS 的 NameTable 是一个整体资源，不能按单个服务订阅；CDS、ED
 目标服务通过 `probe.yaml` 配置：
 
 ```yaml
-TARGET_SERVICE: xhs-service.ddd-learn.svc.cluster.local
+TARGET_SERVICE: xhs-service.ddd-learn-sidecar.svc.cluster.local
 TARGET_PORT: "80"
 TARGET_SUBSETS: v1,v2
 ```
@@ -59,7 +60,7 @@ docker save -o /tmp/ddd-learn-kitex-xds-compatibility-0.0.1.tar \
 sudo k3s ctr -n k8s.io images import \
   /tmp/ddd-learn-kitex-xds-compatibility-0.0.1.tar
 kubectl apply -f probe.yaml
-kubectl logs -n ddd-learn pod/kitex-xds-compatibility
+kubectl logs -n ddd-learn-sidecar pod/kitex-xds-compatibility
 ```
 
 ### 判断结果
@@ -67,7 +68,7 @@ kubectl logs -n ddd-learn pod/kitex-xds-compatibility
 成功时日志会分别输出：
 
 ```text
-NDS target service=xhs-service.ddd-learn.svc.cluster.local ips=[...]
+NDS target service=xhs-service.ddd-learn-sidecar.svc.cluster.local ips=[...]
 CDS resource names=[outbound|80||xhs-service..., outbound|80|v1|xhs-service..., ...]
 EDS resource names=[outbound|80||xhs-service..., ...]
 compatibility gate passed: [...]
@@ -95,23 +96,48 @@ sudo k3s ctr -n k8s.io images import /tmp/xhs_grpc-0.0.1.tar
 
 ```bash
 helm upgrade --install xhs-grpc deployments/gateway/helm/xhs \
-  --namespace ddd-learn --create-namespace \
+  --namespace ddd-learn-sidecar \
   --values deployments/gateway/009_istio_proxyless/values/xhs-grpc.yaml
 ```
 
 验证资源和 gRPC Probe：
 
 ```bash
-kubectl -n ddd-learn get pods -l 'app.kubernetes.io/instance=xhs-grpc'
-kubectl -n ddd-learn get service xhs-grpc-service
-kubectl -n ddd-learn get endpointslice \
+kubectl -n ddd-learn-sidecar get pods -l 'app.kubernetes.io/instance=xhs-grpc'
+kubectl -n ddd-learn-sidecar get service xhs-grpc-service
+kubectl -n ddd-learn-sidecar get endpointslice \
   -l kubernetes.io/service-name=xhs-grpc-service -o wide
-kubectl -n ddd-learn describe pod -l 'app.kubernetes.io/instance=xhs-grpc'
+kubectl -n ddd-learn-sidecar describe pod -l 'app.kubernetes.io/instance=xhs-grpc'
 ```
 
-`xhs-grpc-service` 没有绑定 Waypoint，但 Pod 仍处于 `ddd-learn` 的 Ambient namespace 中，
-东西向流量继续由 ztunnel 接管。当前步骤不修改旧 XHS 的 HTTPRoute，HTTP/JSON 转码留到
-下一步处理。
+`xhs-grpc-service` 不绑定 Waypoint，Pod 由 `ddd-learn-sidecar` 的注入标签添加 Envoy
+Sidecar。后续 Social 启用 Proxyless xDS 时只对 Social 关闭注入，使 Kitex Client 成为其
+唯一的 outbound L7 执行点。
+
+Kitex Server 保留默认协议探测器，由它根据 HTTP/2 preface 选择 gRPC 的 nphttp2
+处理路径；不要直接用 `WithTransHandlerFactory(nphttp2.NewSvrTransHandlerFactory())`
+替换默认探测器。当前版本在该显式配置下只会建立 TCP 连接，标准 gRPC 握手无法完成，最终表现为
+Kubernetes gRPC Probe 超时。Protobuf unary RPC 同时启用
+`WithCompatibleMiddlewareForUnary()`，使 Internal JWT endpoint middleware 可以处理 Kitex
+生成代码中的 `StreamingUnary` 方法。
+
+同一个 Kitex Server 注册了 `CrawlService`、`OrganizationService` 和标准
+`grpc.health.v1.Health`。`OrganizationService` 从 Internal JWT Principal 取得用户 ID，再通过
+`KETO_READ_URL=http://keto-read:80` 查询 `Organization` relation tuples；它不会把 Alice/Bob
+的组织写死在 gRPC 服务中。
+
+`CrawlService` 在每个业务 RPC 内使用同一个 Keto Read Client 校验组织权限：
+
+| RPC | Keto relation |
+| --- | --- |
+| `StartCrawlTask` | `start_crawl` |
+| `ListCrawlContents`、`GetKeywords` | `view_content` |
+| `UpdateKeywords` | `modify_keywords` |
+
+校验主体来自 Internal JWT 的 `sub`，并转换成 Keto subject `User:<sub>`；namespace 是
+`Organization`，object 是请求中的 `organization_id`。权限不足返回 gRPC
+`PermissionDenied`，Transcoder 将其映射为 HTTP 403；Keto 暂时不可用返回 gRPC
+`Unavailable`，避免把基础设施错误误报成无权限。
 
 ## 第五步：生成 XHS gRPC-JSON Transcoder 配置
 
@@ -145,8 +171,25 @@ deployments/gateway/009_istio_proxyless/ingress/xhs-grpc-transcoder.yaml
 router filter 之前插入 `envoy.filters.http.grpc_json_transcoder`。descriptor 通过
 `proto_descriptor_bin` 内联，当前只启用 `CrawlService` 和 `OrganizationService`。
 
-本步骤只生成声明式配置，尚未执行 `kubectl apply`；实际 Filter Chain 和 HTTP/JSON 转码在后续
-步骤验证。
+Transcoder 必须设置：
+
+```yaml
+match_incoming_request_route: true
+```
+
+这样 Envoy 根据转码前的 `/v1/xhs/...` 选择 `HTTPRoute/istio-xhs-service`。如果不设置，转码器
+把 path 改成 `/<package>.<service>/<method>` 后会重新匹配路由，并落入 `/` 的 UI 兜底路由，
+表面现象是请求被发往 `ui-example` 并返回 `503 connection termination`。
+
+应用该声明式配置后，可通过下面的请求确认 Transcoder 和路由已经生效：
+
+```bash
+kubectl apply -f deployments/gateway/009_istio_proxyless/ingress/xhs-grpc-transcoder.yaml
+curl -b /tmp/alice-sidecar-cookies.txt \
+  http://192.168.2.41:30425/v1/xhs/me/organizations
+```
+
+Alice 返回组织 `G` 和角色 `admins`；Bob 返回组织 `G` 和角色 `members`。
 
 ## 第五步：将 `/v1/xhs` 路由切换到 gRPC Service
 
@@ -173,26 +216,29 @@ HTTP/JSON /v1/xhs/*
 旧的 `xhs-service` HTTP 后端不参与这条新链路；Oathkeeper 的认证规则仍按 `/v1/xhs` 匹配，
 因此本步骤没有改变认证入口。
 
-## 第五步：生成 XHS gRPC-JSON Transcoder descriptor
+### 联调结果
 
-本步骤只生成 descriptor，不创建 `EnvoyFilter`，也不修改现有 HTTPRoute。
-descriptor 是 Protobuf 的 `FileDescriptorSet` 二进制文件，包含 XHS 的 service、RPC、message
-以及 `google.api.http` 注解。Envoy 的 gRPC-JSON Transcoder 通过它建立 HTTP/JSON 请求和
-gRPC 方法之间的映射。
-
-在 `xhs_grpc` 目录执行：
-
-```bash
-cd xhs_grpc
-make descriptor
-```
-
-生成文件：
+当前请求链为：
 
 ```text
-deployments/gateway/009_istio_proxyless/transcoder/xhs.pb
+Kratos Session Cookie
+  -> Istio Ingress
+  -> Oathkeeper ext_authz 签发 Internal JWT
+  -> gRPC-JSON Transcoder
+  -> xhs-grpc-service
+  -> XHS JWT Middleware
+  -> CrawlService / OrganizationService
+  -> Keto Read API
 ```
 
-生成命令使用 `--include_imports`，因此 descriptor 内同时包含 XHS IDL 和
-`google/api/annotations.proto` 等依赖；使用 `--include_source_info` 便于调试和定位 IDL
-来源。后续 Gateway 配置直接引用该文件，不需要在运行时读取源码或重新执行 `protoc`。
+实际验证结果：
+
+| 身份与操作 | HTTP 状态 |
+| --- | --- |
+| Alice 查询组织、查看内容、启动任务、修改关键词 | `200` |
+| Bob 查询组织、查看内容、启动任务 | `200` |
+| Bob 修改关键词 | `403` |
+| 未携带 Kratos Session 请求 XHS API | `401` |
+
+两个 `xhs-grpc-service` Pod 均为 `2/2 Ready`，说明 Kubernetes 原生 gRPC Probe 能通过各
+Pod 的 Sidecar 调用 `grpc.health.v1.Health/Check`。

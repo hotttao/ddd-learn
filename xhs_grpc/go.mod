@@ -7,6 +7,7 @@ require (
 	github.com/cloudwego/kitex v0.11.3
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/genproto v0.0.0-20210513213006-bf773b8c8384
+	google.golang.org/grpc v1.74.2
 	google.golang.org/protobuf v1.36.11
 	media_agent/hertz_infra v0.0.0-00010101000000-000000000000
 )

@@ -50,19 +50,11 @@ spec:
           {{- end }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
-            {{- if .grpc }}
-            {{- toYaml (dict "grpc" .grpc) | nindent 12 }}
-            {{- else }}
             {{- toYaml . | nindent 12 }}
-            {{- end }}
           {{- end }}
           {{- with .Values.readinessProbe }}
           readinessProbe:
-            {{- if .grpc }}
-            {{- toYaml (dict "grpc" .grpc) | nindent 12 }}
-            {{- else }}
             {{- toYaml . | nindent 12 }}
-            {{- end }}
           {{- end }}
           {{- with .Values.resources }}
           resources:

@@ -1,0 +1,8 @@
+# 009 Proxyless 实验使用独立 namespace，不继承 006 的 Ambient enrollment。
+# istio-injection=enabled 表示新建 Pod 默认注入 Envoy Sidecar。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ddd-learn-sidecar
+  labels:
+    istio-injection: enabled

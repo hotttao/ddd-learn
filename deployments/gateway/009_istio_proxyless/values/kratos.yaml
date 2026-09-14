@@ -1,4 +1,4 @@
-# Istio Ambient 实验的 Kratos values；通过 helm -n ddd-learn 部署。
+# Istio Sidecar/Proxyless 实验的 Kratos values；部署到 ddd-learn-sidecar。
 fullnameOverride: kratos
 replicaCount: 1
 
@@ -117,3 +117,9 @@ service:
 
 serviceMonitor:
   enabled: true
+
+# 迁移 Job 是一次性任务；若注入长期运行的 Envoy Sidecar，业务容器完成后 Job 仍不会结束。
+job:
+  podMetadata:
+    annotations:
+      sidecar.istio.io/inject: "false"

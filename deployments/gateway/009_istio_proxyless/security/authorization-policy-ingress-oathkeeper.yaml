@@ -4,10 +4,10 @@ apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
   name: istio-ingress-oathkeeper
-  namespace: ddd-learn
+  namespace: ddd-learn-sidecar
 spec:
   targetRefs:
-    # CUSTOM 必须绑定到由 Istio 管理的 Gateway Envoy，不能下发给 Ambient ztunnel。
+    # CUSTOM 绑定到由 Istio 管理的 Gateway Envoy，不下发给普通业务 Sidecar。
     - group: gateway.networking.k8s.io
       kind: Gateway
       name: istio-ingress

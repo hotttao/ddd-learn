@@ -24,11 +24,21 @@ env:
     value: internal-api
   - name: INTERNAL_JWKS_URL
     value: "http://oathkeeper-api:4456/.well-known/jwks.json"
+  - name: KETO_READ_URL
+    value: "http://keto-read:80"
 
 livenessProbe:
+  httpGet: null
+  # kubelet 的原生 gRPC Probe 调用 grpc.health.v1.Health/Check。
   grpc:
-    port: grpc
+    port: 8090
+  initialDelaySeconds: 5
+  timeoutSeconds: 5
 
 readinessProbe:
+  httpGet: null
+  # Sidecar 注入会把探针改写给 pilot-agent，再由它检查应用容器。
   grpc:
-    port: grpc
+    port: 8090
+  initialDelaySeconds: 5
+  timeoutSeconds: 5

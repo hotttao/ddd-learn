@@ -4,14 +4,14 @@ metadata:
   # 为探针提供独立的 Kubernetes 工作负载身份，避免复用业务服务账号。
   name: kitex-xds-compatibility
   # 与本实验的业务服务处于同一 namespace，使 istiod 生成相同范围的配置视图。
-  namespace: ddd-learn
+  namespace: ddd-learn-sidecar
 ---
 apiVersion: v1
 kind: Pod
 metadata:
   # 这是运行一次后退出的兼容性探针，不需要 Deployment 管理副本和滚动升级。
   name: kitex-xds-compatibility
-  namespace: ddd-learn
+  namespace: ddd-learn-sidecar
   labels:
     # Kubernetes 推荐标签：标识当前对象的应用名称。
     app.kubernetes.io/name: kitex-xds-compatibility
@@ -53,7 +53,7 @@ spec:
           value: istiod.istio-system.svc:15010
         # 目标服务配置用于模拟 Social/Kitex 客户端只访问 XHS 的场景。
         - name: TARGET_SERVICE
-          value: xhs-service.ddd-learn.svc.cluster.local
+          value: xhs-service.ddd-learn-sidecar.svc.cluster.local
         - name: TARGET_PORT
           value: "80"
         # 对应当前实验中 DestinationRule 定义的 XHS v1/v2 subset。

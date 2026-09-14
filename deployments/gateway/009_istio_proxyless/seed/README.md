@@ -1,6 +1,6 @@
 # Ory 教学数据初始化
 
-`ory-seed.yaml` 为当前 `ddd-learn` namespace 中已经部署的 Kratos 和 Keto 写入开发数据。
+`ory-seed.yaml` 为当前 `ddd-learn-sidecar` namespace 中已经部署的 Kratos 和 Keto 写入开发数据。
 它不是数据库迁移：Ory Helm Chart 负责创建数据库表，下面的 Job 负责调用 Ory Admin API
 写入身份和关系数据。
 
@@ -23,25 +23,25 @@ Keto relation tuple 表示，OPL namespace 定义在 `keto/namespaces.ts`。
 先完成第 1 步中的 Kratos、Keto Helm 部署，再执行：
 
 ```shell
-kubectl apply -f deployments/gateway/006_istio_ambient/seed/ory-seed.yaml
-kubectl -n ddd-learn wait --for=condition=complete job/kratos-seed --timeout=180s
-kubectl -n ddd-learn wait --for=condition=complete job/keto-seed --timeout=180s
+kubectl apply -f deployments/gateway/009_istio_proxyless/seed/ory-seed.yaml
+kubectl -n ddd-learn-sidecar wait --for=condition=complete job/kratos-seed --timeout=180s
+kubectl -n ddd-learn-sidecar wait --for=condition=complete job/keto-seed --timeout=180s
 ```
 
 查看执行过程：
 
 ```shell
-kubectl -n ddd-learn logs job/kratos-seed
-kubectl -n ddd-learn logs job/keto-seed
-kubectl -n ddd-learn get secret,configmap,job -l app.kubernetes.io/name
+kubectl -n ddd-learn-sidecar logs job/kratos-seed
+kubectl -n ddd-learn-sidecar logs job/keto-seed
+kubectl -n ddd-learn-sidecar get secret,configmap,job -l app.kubernetes.io/name
 ```
 
 两个 Job 都是幂等的：Kratos 按邮箱查找并更新身份，Keto 使用 PUT 写入关系。
 如果要再次执行 Job，需要先删除 Job 对象；删除 Job 不会删除 Kratos 或 Keto 数据库中的数据：
 
 ```shell
-kubectl -n ddd-learn delete job kratos-seed keto-seed
-kubectl apply -f deployments/gateway/006_istio_ambient/seed/ory-seed.yaml
+kubectl -n ddd-learn-sidecar delete job kratos-seed keto-seed
+kubectl apply -f deployments/gateway/009_istio_proxyless/seed/ory-seed.yaml
 ```
 
 清单中的密码是教学环境示例，生产环境应改成外部 Secret 或受保护的管理流程。

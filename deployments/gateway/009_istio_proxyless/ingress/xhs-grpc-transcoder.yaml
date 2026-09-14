@@ -4,13 +4,13 @@
 apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
 metadata:
-  # metadata.name 是 EnvoyFilter 在 ddd-learn namespace 中的唯一名称。
+  # metadata.name 是 EnvoyFilter 在 ddd-learn-sidecar namespace 中的唯一名称。
   name: xhs-grpc-json-transcoder
-  # 该配置只在 ddd-learn namespace 内生效。
-  namespace: ddd-learn
+  # 该配置只在 ddd-learn-sidecar namespace 内生效。
+  namespace: ddd-learn-sidecar
 spec:
   # 只匹配 Istio Gateway Controller 为 istio-ingress 创建的数据面 Pod。
-  # 因此 Ory、xhs Pod 和 Ambient ztunnel 不会加载这个 HTTP Filter。
+  # 因此 Ory 和 xhs 的 Sidecar Envoy 不会加载这个 HTTP Filter。
   workloadSelector:
     labels:
       gateway.networking.k8s.io/gateway-name: istio-ingress
@@ -44,6 +44,9 @@ spec:
             services:
               - xhs_service.crawl.CrawlService
               - xhs_service.organization.OrganizationService
+            # 使用转码前的 HTTP path 选择 HTTPRoute 后端。否则转码后的
+            # /<package>.<service>/<method> 会重新匹配到兜底的 / 路由。
+            match_incoming_request_route: true
             # 保留 proto 字段原名，例如 organization_id，而不是转换成 organizationId。
             print_options:
               preserve_proto_field_names: true

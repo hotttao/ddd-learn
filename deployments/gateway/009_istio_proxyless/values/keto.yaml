@@ -1,4 +1,4 @@
-# Istio Ambient 实验的 Keto values；通过 helm -n ddd-learn 部署。
+# Istio Sidecar/Proxyless 实验的 Keto values；部署到 ddd-learn-sidecar。
 fullnameOverride: keto
 replicaCount: 1
 
@@ -32,9 +32,15 @@ keto:
 
 service:
   read:
+    # 当前 xhs 与管理初始化流程都调用 Keto REST API；Sidecar 必须按 HTTP/1.1
+    # 转发，不能继承 Chart 默认的纯 gRPC 协议声明。
+    name: http-read
+    appProtocol: http
     headless:
       enabled: false
   write:
+    name: http-write
+    appProtocol: http
     headless:
       enabled: false
   metrics:
@@ -52,3 +58,8 @@ deployment:
     - name: keto-namespaces
       mountPath: /etc/keto-namespaces
       readOnly: true
+
+job:
+  podMetadata:
+    annotations:
+      sidecar.istio.io/inject: "false"
