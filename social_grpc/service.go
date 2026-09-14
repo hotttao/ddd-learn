@@ -5,6 +5,7 @@ import (
 
 	"github.com/cloudwego/kitex/pkg/remote/trans/nphttp2/codes"
 	"github.com/cloudwego/kitex/pkg/remote/trans/nphttp2/status"
+	serverjwt "media_agent/hertz_infra/serverhertz/jwt"
 	social "media_agent/social_grpc/kitex_gen/social_service"
 )
 
@@ -17,9 +18,12 @@ func newSocialService(providers ...contentProvider) *socialService {
 }
 
 func (s *socialService) ListMyOrganizations(
-	context.Context,
-	*social.ListMyOrganizationsRequest,
+	ctx context.Context,
+	_ *social.ListMyOrganizationsRequest,
 ) (*social.ListMyOrganizationsResponse, error) {
+	if _, ok := serverjwt.PrincipalFromContext(ctx); !ok {
+		return nil, status.Err(codes.Unauthenticated, "unauthenticated")
+	}
 	// Organization membership will be read from the authenticated principal
 	// and Keto in the integration step. This response is a stable mock for now.
 	return &social.ListMyOrganizationsResponse{Organizations: []*social.OrganizationMembership{{

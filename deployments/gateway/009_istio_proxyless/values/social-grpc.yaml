@@ -17,8 +17,13 @@ service:
   appProtocol: grpc
   labels: {}
 
-# 本步骤的 Social Handler 不读取认证信息；认证和 Internal JWT 传播在 Gateway 集成步骤处理。
-env: []
+env:
+  - name: INTERNAL_JWT_ISSUER
+    value: "http://oathkeeper-api:4456/"
+  - name: INTERNAL_JWT_AUDIENCE
+    value: internal-api
+  - name: INTERNAL_JWKS_URL
+    value: "http://oathkeeper-api:4456/.well-known/jwks.json"
 
 # 当前服务暂时没有标准 gRPC Health Service，先使用 TCP 探针确认进程监听成功。
 livenessProbe:

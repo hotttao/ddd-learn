@@ -363,3 +363,37 @@ npm run build
 ```
 
 本步骤构建通过。未登录时页面显示登录入口，登录后才请求 Social 接口。
+
+## 第十步：Social 服务验证 Internal JWT
+
+Social 复用 `hertz_infra/serverhertz/jwt` 的公共验证器，不在服务内重新实现 JWT 验签。
+Kitex Middleware 从 gRPC Metadata 读取：
+
+```text
+authorization: Bearer <token>
+```
+
+验证签名、issuer、audience、算法和有效期后，将 `Principal` 写入请求 context，业务 Handler
+可以通过公共 API 读取用户身份。JWKS 从 Oathkeeper API 的：
+
+```text
+http://oathkeeper-api:4456/.well-known/jwks.json
+```
+
+读取，并在内存中缓存和定期刷新。当前 Pod 的环境变量由
+`values/social-grpc.yaml` 注入；没有 JWT 或 JWT 无效时，Social 进程拒绝请求。
+
+重新构建和部署：
+
+```bash
+cd social_grpc
+make image
+docker save -o /tmp/ddd-learn-social-grpc-0.0.1.tar social_grpc:0.0.1
+sudo k3s ctr -n k8s.io images import /tmp/ddd-learn-social-grpc-0.0.1.tar
+helm upgrade --install social-grpc deployments/gateway/helm/xhs \
+  --namespace ddd-learn-proxyless \
+  --values deployments/gateway/009_istio_proxyless/values/social-grpc.yaml
+```
+
+验证结果：Social Pod 为 `Running/Ready`，未登录的 Gateway 请求返回 `401`。当前 Handler
+仍返回 Mock 组织和 XHS 内容，Keto 组织权限与真实 XHS Client 在后续步骤接入。
