@@ -461,7 +461,7 @@ Social 进程启动
 - `social_grpc/provider.go` 使用 `xdssuite.NewClientOption()`，删除固定地址 Resolver。
 - `values/social-grpc.yaml` 使用完整 Service DNS 地址，并通过 Downward API 注入
   `POD_NAMESPACE`、`POD_NAME`、`INSTANCE_IP` 和 `KITEX_XDS_METAS`。
-- `values/xhs-grpc.yaml` 使用与 Oathkeeper 一致的 issuer `oathkeeper`，保证 XHS 能验证
+- `values/xhs-grpc.yaml` 使用与 Oathkeeper 一致的 issuer `http://oathkeeper-api:4456/`，保证 XHS 能验证
   Social 继续传递的 Internal JWT。
 - `routing/xhs-proxyless.yaml` 用 `VirtualService` 按服务级前缀声明 Kitex 路由：
   `/xhs_service.crawl.CrawlService/`，因此 CrawlService 新增 RPC 时不需要逐个补 URI。
