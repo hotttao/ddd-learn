@@ -11,6 +11,7 @@ import (
 
 	"github.com/cloudwego/kitex/pkg/endpoint"
 	"github.com/cloudwego/kitex/server"
+	"github.com/kitex-contrib/xds"
 	// Register Kitex's gRPC gzip compressor for native Kubernetes gRPC probes.
 	_ "github.com/cloudwego/kitex/pkg/remote/codec/protobuf/encoding/gzip"
 	kitexmetadata "github.com/cloudwego/kitex/pkg/remote/trans/nphttp2/metadata"
@@ -20,11 +21,17 @@ import (
 )
 
 func main() {
+	if err := xds.Init(); err != nil {
+		log.Fatalf("initialize xDS: %v", err)
+	}
 	validator, err := newValidatorWithRetry(context.Background())
 	if err != nil {
 		log.Fatalf("initialize internal JWT validator: %v", err)
 	}
-	provider, err := newXHSProvider(getenv("XHS_GRPC_ADDR", "xhs-grpc-service:80"))
+	provider, err := newXHSProvider(getenv(
+		"XHS_GRPC_ADDR",
+		"xhs-grpc-service.ddd-learn-proxyless.svc.cluster.local:80",
+	))
 	if err != nil {
 		log.Fatalf("initialize XHS provider: %v", err)
 	}

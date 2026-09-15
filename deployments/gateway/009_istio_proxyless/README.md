@@ -443,3 +443,37 @@ kubectl -n ddd-learn-proxyless rollout status deployment/social-grpc-service
 本步骤还将 XHS Provider 的本地地址配置为 `xhs-grpc-service:80`，没有引入 xDS。当前
 Social 和 XHS Pod 均为 `Running/Ready`；通过已登录的 Social 页面查询时，响应内容来自
 真实 XHS 服务，而不是 Mock Provider。
+
+## 第十二步：Social XHS Client 启用 Proxyless xDS
+
+本步骤将 Social 的固定地址 Client 改为 `kitex-contrib/xds` Client：
+
+```text
+Social 进程启动
+  ├── xds.Init() 连接 istiod ADS
+  ├── xdssuite.NewClientOption() 注入 RouterMiddleware + Resolver
+  └── XHS Client 从 xDS 获取路由和 Endpoint
+```
+
+代码变化：
+
+- `social_grpc/main.go` 调用 `xds.Init()`。
+- `social_grpc/provider.go` 使用 `xdssuite.NewClientOption()`，删除固定地址 Resolver。
+- `values/social-grpc.yaml` 使用完整 Service DNS 地址，并通过 Downward API 注入
+  `POD_NAMESPACE`、`POD_NAME`、`INSTANCE_IP` 和 `KITEX_XDS_METAS`。
+- `values/xhs-grpc.yaml` 使用与 Oathkeeper 一致的 issuer `oathkeeper`，保证 XHS 能验证
+  Social 继续传递的 Internal JWT。
+- `routing/xhs-proxyless.yaml` 用 `VirtualService` 按服务级前缀声明 Kitex 路由：
+  `/xhs_service.crawl.CrawlService/`，因此 CrawlService 新增 RPC 时不需要逐个补 URI。
+
+应用声明式 xDS 路由：
+
+```bash
+kubectl apply -f deployments/gateway/009_istio_proxyless/routing/xhs-proxyless.yaml
+```
+
+这里的 `VirtualService` 只服务于 Social 的 Proxyless 客户端，不是外部 Gateway 路由；
+外部 `/v1/xhs` 和 `/v1/social` 的 HTTPRoute 保持不变。`Service/xhs-grpc-service` 继续
+提供 CDS/EDS 的服务和 Endpoint 来源，VirtualService 提供方法级 RDS 路由。
+
+本步骤暂不启用故障注入和熔断；二者分别在后续步骤验证。

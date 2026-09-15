@@ -1,0 +1,24 @@
+# Proxyless Kitex Client 使用的声明式路由配置。
+# 该文件由 istiod 转换为 Social 客户端订阅的 LDS/RDS/CDS/EDS 资源，
+# 不会创建新的 Gateway，也不会改变外部 HTTP/JSON 入口。
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: xhs-proxyless
+  namespace: ddd-learn-proxyless
+spec:
+  # 必须使用 Kitex xDS Client 目标地址对应的完整 Service DNS 名称。
+  hosts:
+    - xhs-grpc-service.ddd-learn-proxyless.svc.cluster.local
+  http:
+    - name: crawl-service
+      # Kitex xDS 当前按 ${package}.${service}/${method} 生成请求路径。
+      # 使用服务级前缀后，CrawlService 新增 RPC 时无需逐个补充 URI。
+      match:
+        - uri:
+            prefix: /xhs_service.crawl.CrawlService/
+      route:
+        - destination:
+            host: xhs-grpc-service.ddd-learn-proxyless.svc.cluster.local
+            port:
+              number: 80

@@ -6,6 +6,7 @@ import (
 	"github.com/cloudwego/kitex/client"
 	kitexmetadata "github.com/cloudwego/kitex/pkg/remote/trans/nphttp2/metadata"
 	"github.com/cloudwego/kitex/transport"
+	"github.com/kitex-contrib/xds/xdssuite"
 	social "media_agent/social_grpc/kitex_gen/social_service"
 	crawl "media_agent/xhs_grpc/kitex_gen/xhs_service/crawl"
 	crawlservice "media_agent/xhs_grpc/kitex_gen/xhs_service/crawl/crawlservice"
@@ -37,9 +38,9 @@ type xhsProvider struct {
 
 func newXHSProvider(address string) (*xhsProvider, error) {
 	xhsClient, err := crawlservice.NewClient(
-		"xhs_service.crawl",
-		client.WithHostPorts(address),
+		address,
 		client.WithTransportProtocol(transport.GRPC),
+		xdssuite.NewClientOption(),
 	)
 	if err != nil {
 		return nil, err

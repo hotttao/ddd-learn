@@ -19,7 +19,7 @@ service:
 
 env:
   - name: INTERNAL_JWT_ISSUER
-    value: "http://oathkeeper-api:4456/"
+    value: oathkeeper
   - name: INTERNAL_JWT_AUDIENCE
     value: internal-api
   - name: INTERNAL_JWKS_URL

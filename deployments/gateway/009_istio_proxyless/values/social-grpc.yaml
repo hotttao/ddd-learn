@@ -1,4 +1,4 @@
-# Social 聚合服务的部署配置；本步骤将 XHS Provider 切换为真实 Kitex Client。
+# Social 聚合服务的部署配置；本步骤为 XHS Client 启用 Proxyless xDS。
 fullnameOverride: social-grpc-service
 
 replicaCount: 1
@@ -25,7 +25,24 @@ env:
   - name: INTERNAL_JWKS_URL
     value: "http://oathkeeper-api:4456/.well-known/jwks.json"
   - name: XHS_GRPC_ADDR
-    value: "xhs-grpc-service:80"
+    value: "xhs-grpc-service.ddd-learn-proxyless.svc.cluster.local:80"
+  # 以下环境变量由 kitex-contrib/xds 用于构造 xDS Node 身份和连接 istiod。
+  - name: POD_NAMESPACE
+    valueFrom:
+      fieldRef:
+        fieldPath: metadata.namespace
+  - name: POD_NAME
+    valueFrom:
+      fieldRef:
+        fieldPath: metadata.name
+  - name: INSTANCE_IP
+    valueFrom:
+      fieldRef:
+        fieldPath: status.podIP
+  - name: KITEX_XDS_METAS
+    value: '{"CLUSTER_ID":"Kubernetes","DNS_AUTO_ALLOCATE":"true","DNS_CAPTURE":"true","INSTANCE_IPS":"$(INSTANCE_IP)","NAMESPACE":"$(POD_NAMESPACE)"}'
+  - name: KITEX_XDS_ISTIO_ADDR
+    value: istiod.istio-system.svc:15010
 
 # 当前服务暂时没有标准 gRPC Health Service，先使用 TCP 探针确认进程监听成功。
 livenessProbe:
