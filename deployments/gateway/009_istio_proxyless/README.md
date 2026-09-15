@@ -491,3 +491,59 @@ kubectl apply -f deployments/gateway/009_istio_proxyless/routing/xhs-proxyless.y
 Social 只转发这一个明确的测试 Metadata，普通请求不会携带故障标记。`ui_example` 的
 Social 页面提供故障模式选择器，可用于观察真实的 Social → XHS 错误链路。当前尚未配置
 熔断，因此故障请求仍会到达 XHS；下一步再单独验证熔断后的本地快速失败。
+
+## 第十四步：使用 xDS 配置驱动 Social Outbound 熔断
+
+`kitex-contrib/xds/xdssuite.NewClientOption()` 已默认注册实例级 Circuit Breaker；本步骤
+只通过 `EnvoyFilter` 补充 Istio 侧 CDS `outlierDetection` 配置：
+
+```bash
+kubectl apply -f deployments/gateway/009_istio_proxyless/routing/xhs-circuit-breaker.yaml
+```
+
+配置通过 CLUSTER patch 绑定 XHS Service。Istiod 将它转换到 XHS 的 xDS Cluster，
+Social 的 xDS Client 收到 Cluster 更新后，由 `xdssuite` 转换为 Kitex 的 `CBConfig`。本实验
+阈值为最近 2 次请求达到 50% 错误率，便于快速观察，不是生产参数。
+
+当前只验证实例级熔断：异常 Endpoint 被摘除，健康 Endpoint 仍可响应；没有启用
+`WithServiceCircuitBreak(true)`，因此不会把整个 XHS Cluster 的熔断作为本步骤目标。
+
+### 实例摘除的实际含义
+
+这里的“实例摘除”不会删除或重建 XHS Pod，也不会修改 Kubernetes Service、EndpointSlice，
+或从 Istiod 的 CDS 中永久删除实例。执行过程是：
+
+```text
+XHS Pod 返回 Unavailable
+        ↓
+Social Kitex Client 统计某个 Endpoint 的失败率
+        ↓
+Kitex Circuit Breaker 暂时停止选择该 Endpoint
+```
+
+例如 XHS 有两个 Pod：
+
+```text
+xhs-pod-1
+xhs-pod-2
+```
+
+当某个实例至少收到 2 次请求，且错误率达到 50% 后，Social 本地的 Circuit Breaker 会暂时
+停止向该实例发送请求。`base_ejection_time: 30s` 表示 30 秒后允许重新探测；恢复成功后，
+该实例会重新参与请求，失败则可能再次被摘除。
+
+`max_ejection_percent: 100` 允许 Social 暂时摘除全部 XHS 实例。即使如此，XHS Pod 仍然
+存在并继续运行，Kubernetes Service 的 Endpoint 列表也不会改变。
+
+当前 `workloadSelector` 只匹配 `social-grpc`：
+
+```yaml
+app.kubernetes.io/instance: social-grpc
+```
+
+所以该熔断只影响：
+
+```text
+Social -> XHS：可能暂时停止使用异常 Endpoint
+其他服务 -> XHS：不受本 EnvoyFilter 影响，仍可正常访问
+```

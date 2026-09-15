@@ -1,0 +1,32 @@
+# Proxyless Kitex Client 消费的 XHS CDS 熔断配置。
+# failurePercentageThreshold/failurePercentageRequestVolume 是 Envoy Cluster 的原生字段，
+# 需要通过 EnvoyFilter 注入；Istiod 会将 patch 后的 Cluster 下发给 Proxyless xDS Client。
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: xhs-proxyless-circuit-breaker
+  namespace: ddd-learn-proxyless
+spec:
+  workloadSelector:
+    labels:
+      # 只作用于 Social Client，不修改 XHS Server 或其他客户端。
+      app.kubernetes.io/instance: social-grpc
+  configPatches:
+    - applyTo: CLUSTER
+      match:
+        context: SIDECAR_OUTBOUND
+        cluster:
+          service: xhs-grpc-service.ddd-learn-proxyless.svc.cluster.local
+      patch:
+        operation: MERGE
+        value:
+          outlier_detection:
+            # 实验参数：在最近 2 次请求中达到 50% 错误率时触发实例摘除。
+            failure_percentage_threshold: 50
+            failure_percentage_request_volume: 2
+            # 每 5 秒检查一次实例是否需要摘除。
+            interval: 5s
+            # 被摘除的实例至少 30 秒后才允许探测恢复。
+            base_ejection_time: 30s
+            # 实验中允许摘除全部异常实例，便于观察熔断结果。
+            max_ejection_percent: 100
