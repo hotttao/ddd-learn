@@ -8,10 +8,12 @@ WORKDIR /workspace
 COPY social_grpc/go.mod social_grpc/go.sum social_grpc/
 COPY hertz_infra/go.mod hertz_infra/go.sum hertz_infra/
 COPY hertz_gen/go.mod hertz_gen/go.sum hertz_gen/
+COPY xhs_grpc/go.mod xhs_grpc/go.sum xhs_grpc/
 RUN cd social_grpc && GOWORK=off go mod download
 
 COPY hertz_gen/ hertz_gen/
 COPY hertz_infra/ hertz_infra/
+COPY xhs_grpc/kitex_gen/ xhs_grpc/kitex_gen/
 COPY social_grpc/ social_grpc/
 RUN cd social_grpc && GOWORK=off CGO_ENABLED=0 go build -o /out/social_grpc .
 

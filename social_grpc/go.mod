@@ -9,11 +9,13 @@ require (
 	google.golang.org/genproto v0.0.0-20210513213006-bf773b8c8384
 	google.golang.org/protobuf v1.36.11
 	media_agent/hertz_infra v0.0.0-00010101000000-000000000000
+	media_agent/xhs_grpc v0.0.0
 )
 
 replace (
 	media_agent/hertz_gen => ../hertz_gen
 	media_agent/hertz_infra => ../hertz_infra
+	media_agent/xhs_grpc => ../xhs_grpc
 )
 
 require (

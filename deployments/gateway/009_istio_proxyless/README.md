@@ -397,3 +397,49 @@ helm upgrade --install social-grpc deployments/gateway/helm/xhs \
 
 验证结果：Social Pod 为 `Running/Ready`，未登录的 Gateway 请求返回 `401`。当前 Handler
 仍返回 Mock 组织和 XHS 内容，Keto 组织权限与真实 XHS Client 在后续步骤接入。
+
+## 第十一步：Social 调用真实 XHS Kitex Client
+
+本步骤把 Social 的 `XHSProvider` 从 Mock 实现切换为真实的 XHS gRPC Client：
+
+```text
+Gateway/Oathkeeper -> Social gRPC -> XHS gRPC
+                                  └-> xhs-grpc-service:80
+```
+
+代码位置：
+
+- `social_grpc/provider.go`：使用 XHS 生成的 `crawlservice.Client`，明确指定
+  `client.WithHostPorts` 和 `transport.GRPC`，调用 `ListCrawlContents`。
+- `social_grpc/main.go`：从 `XHS_GRPC_ADDR` 创建 Provider；默认地址为
+  `xhs-grpc-service:80`。
+- `deployments/gateway/009_istio_proxyless/values/social-grpc.yaml`：向 Pod 注入
+  `XHS_GRPC_ADDR`。
+- `social_grpc/Dockerfile`：将 `xhs_grpc/kitex_gen` 和本地模块元数据复制进构建上下文，
+  使镜像可以编译生成的 XHS Client。
+
+JWT 不只在 Social 边界校验一次。Social 从入站 Kitex Metadata 取出
+`authorization`，再作为出站 Metadata 传给 XHS；XHS 的 JWT Middleware 会在自己的服务边界
+再次校验同一个 Internal JWT。这样每个服务都保持独立的信任边界。
+
+构建和导入镜像：
+
+```bash
+cd social_grpc
+make image
+docker save -o /tmp/ddd-learn-social-grpc-0.0.1.tar social_grpc:0.0.1
+sudo k3s ctr -n k8s.io images import /tmp/ddd-learn-social-grpc-0.0.1.tar
+rm /tmp/ddd-learn-social-grpc-0.0.1.tar
+```
+
+由于镜像标签仍为 `social_grpc:0.0.1` 且使用 `IfNotPresent`，导入新镜像后需要重启
+Deployment：
+
+```bash
+kubectl -n ddd-learn-proxyless rollout restart deployment/social-grpc-service
+kubectl -n ddd-learn-proxyless rollout status deployment/social-grpc-service
+```
+
+本步骤还将 XHS Provider 的本地地址配置为 `xhs-grpc-service:80`，没有引入 xDS。当前
+Social 和 XHS Pod 均为 `Running/Ready`；通过已登录的 Social 页面查询时，响应内容来自
+真实 XHS 服务，而不是 Mock Provider。

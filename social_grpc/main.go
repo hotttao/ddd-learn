@@ -20,11 +20,15 @@ import (
 )
 
 func main() {
-	validator, err := newValidator(context.Background())
+	validator, err := newValidatorWithRetry(context.Background())
 	if err != nil {
 		log.Fatalf("initialize internal JWT validator: %v", err)
 	}
-	service := newSocialService(mockXHSProvider{})
+	provider, err := newXHSProvider(getenv("XHS_GRPC_ADDR", "xhs-grpc-service:80"))
+	if err != nil {
+		log.Fatalf("initialize XHS provider: %v", err)
+	}
+	service := newSocialService(provider)
 	kitexServer := server.NewServer(
 		server.WithServiceAddr(&net.TCPAddr{IP: net.ParseIP("0.0.0.0"), Port: 8091}),
 		// Keep Kitex's default protocol detector so the server accepts gRPC
@@ -38,6 +42,22 @@ func main() {
 	if err := kitexServer.Run(); err != nil {
 		log.Fatalf("run social grpc server: %v", err)
 	}
+}
+
+func newValidatorWithRetry(ctx context.Context) (*serverjwt.Validator, error) {
+	var err error
+	for attempt := 1; attempt <= 5; attempt++ {
+		var validator *serverjwt.Validator
+		validator, err = newValidator(ctx)
+		if err == nil {
+			return validator, nil
+		}
+		if attempt < 5 {
+			log.Printf("initialize internal JWT validator (attempt %d/5): %v; retrying", attempt, err)
+			time.Sleep(2 * time.Second)
+		}
+	}
+	return nil, err
 }
 
 func newValidator(ctx context.Context) (*serverjwt.Validator, error) {
