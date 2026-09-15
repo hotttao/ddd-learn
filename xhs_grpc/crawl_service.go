@@ -52,6 +52,9 @@ func (s *crawlService) ListCrawlContents(ctx context.Context, req *crawl.ListCra
 	if err := s.authorize(ctx, req.GetOrganizationId(), "view_content"); err != nil {
 		return nil, err
 	}
+	if err := injectFault(ctx); err != nil {
+		return nil, err
+	}
 	if req.GetOrganizationId() == "" {
 		return nil, status.Err(codes.InvalidArgument, "organization_id is required")
 	}

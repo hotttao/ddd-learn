@@ -28,8 +28,8 @@ function message(body: unknown, status: number): string {
   return `Request failed with HTTP ${status}`;
 }
 
-async function request<T>(path: string): Promise<SocialRequestResult<T>> {
-  const response = await fetch(path, { credentials: "include" });
+async function request<T>(path: string, headers?: Record<string, string>): Promise<SocialRequestResult<T>> {
+  const response = await fetch(path, { credentials: "include", headers });
   const text = await response.text();
   let data: unknown = {};
   if (text) {
@@ -52,9 +52,12 @@ export function listMyOrganizations(): Promise<SocialRequestResult<ListOrganizat
 export function searchContents(
   organizationId: string,
   keyword: string,
+  faultMode: "" | "unavailable" | "delay" = "",
 ): Promise<SocialRequestResult<SearchContentsResponse>> {
   const query = new URLSearchParams({ keyword });
+  const headers = faultMode ? { "x-ddd-fault-mode": faultMode } : undefined;
   return request(
     `/v1/social/organizations/${encodeURIComponent(organizationId)}/contents?${query.toString()}`,
+    headers,
   );
 }

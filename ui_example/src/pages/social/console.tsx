@@ -10,6 +10,7 @@ export default function SocialConsolePage() {
   const [organizations, setOrganizations] = useState<OrganizationMembership[]>([]);
   const [organizationId, setOrganizationId] = useState("");
   const [keyword, setKeyword] = useState("golang");
+  const [faultMode, setFaultMode] = useState<"" | "unavailable" | "delay">("");
   const [contents, setContents] = useState<SocialContent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +44,7 @@ export default function SocialConsolePage() {
     if (!organizationId) return;
     setLoading(true);
     setError(null);
-    void searchContents(organizationId, keyword)
+    void searchContents(organizationId, keyword, faultMode)
       .then((response) => setContents(response.data.contents ?? []))
       .catch((reason: unknown) => {
         setContents([]);
@@ -66,6 +67,14 @@ export default function SocialConsolePage() {
       <label>
         Keyword
         <input value={keyword} onChange={(event) => setKeyword(event.target.value)} />
+      </label>
+      <label>
+        Test fault mode
+        <select value={faultMode} onChange={(event) => setFaultMode(event.target.value as typeof faultMode)}>
+          <option value="">Disabled</option>
+          <option value="unavailable">Unavailable</option>
+          <option value="delay">6-second delay</option>
+        </select>
       </label>
       <button type="button" disabled={loading || !organizationId} onClick={search}>
         {loading ? "Searching…" : "Search contents"}

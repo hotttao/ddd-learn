@@ -81,5 +81,9 @@ func forwardAuthorization(ctx context.Context) context.Context {
 	if len(authorization) == 0 {
 		return ctx
 	}
-	return kitexmetadata.AppendToOutgoingContext(ctx, "authorization", authorization[0])
+	ctx = kitexmetadata.AppendToOutgoingContext(ctx, "authorization", authorization[0])
+	if faults := incoming.Get("x-ddd-fault-mode"); len(faults) > 0 {
+		ctx = kitexmetadata.AppendToOutgoingContext(ctx, "x-ddd-fault-mode", faults[0])
+	}
+	return ctx
 }

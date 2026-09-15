@@ -477,3 +477,17 @@ kubectl apply -f deployments/gateway/009_istio_proxyless/routing/xhs-proxyless.y
 提供 CDS/EDS 的服务和 Endpoint 来源，VirtualService 提供方法级 RDS 路由。
 
 本步骤暂不启用故障注入和熔断；二者分别在后续步骤验证。
+
+## 第十三步：制造可控的 XHS 故障
+
+本步骤只为 `ListCrawlContents` 增加测试故障，不改变默认业务行为：
+
+| Metadata | XHS 行为 |
+| --- | --- |
+| 无 `x-ddd-fault-mode` | 正常返回 |
+| `x-ddd-fault-mode: unavailable` | 返回 gRPC `Unavailable` |
+| `x-ddd-fault-mode: delay` | 延迟 6 秒；请求超时或取消时提前结束 |
+
+Social 只转发这一个明确的测试 Metadata，普通请求不会携带故障标记。`ui_example` 的
+Social 页面提供故障模式选择器，可用于观察真实的 Social → XHS 错误链路。当前尚未配置
+熔断，因此故障请求仍会到达 XHS；下一步再单独验证熔断后的本地快速失败。
