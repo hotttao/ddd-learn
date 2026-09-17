@@ -1,0 +1,58 @@
+# 第 1 步基础资源：只创建身份和权限，不安装观测组件。
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    # 当前实验先不加入 Istio Ambient，避免观测基础设施被业务数据面影响。
+    istio.io/dataplane-mode: none
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy-gateway
+  namespace: observability
+  # Gateway 后续接收 OTLP 并转发到 Loki、Tempo、Pyroscope。
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy-node-agent
+  namespace: observability
+  # Node Agent 后续以 DaemonSet 运行，需要读取本节点 Pod 元数据。
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: observability-node-agent
+rules:
+  # Alloy 通过 Kubernetes API 将日志/指标补充 namespace、pod、container、node 等属性。
+  - apiGroups: [""]
+    resources:
+      - pods
+      - namespaces
+      - nodes
+    verbs: ["get", "list", "watch"]
+  # 读取控制器归属信息，用于补充 deployment、daemonset 等资源属性。
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - replicasets
+      - daemonsets
+      - statefulsets
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: observability-node-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: observability-node-agent
+subjects:
+  - kind: ServiceAccount
+    name: alloy-node-agent
+    namespace: observability
+
