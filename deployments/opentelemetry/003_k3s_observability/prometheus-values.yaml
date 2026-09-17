@@ -1,0 +1,52 @@
+# kube-prometheus-stack v91.4.1
+# 第 2 步只安装 Prometheus Operator、Prometheus、Alertmanager、
+# kube-state-metrics 和 node-exporter；Grafana 在第 7 步单独安装。
+grafana:
+  enabled: false
+
+prometheus:
+  enabled: true
+  prometheusSpec:
+    # 单节点学习环境保留 7 天指标。
+    retention: 7d
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+    # 允许后续发现不同 namespace 中的 ServiceMonitor/PodMonitor。
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector: {}
+    podMonitorNamespaceSelector: {}
+    # 第 2 步先使用本地 PVC，不配置远程存储。
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 10Gi
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+
+kubeStateMetrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true
+
+prometheusOperator:
+  enabled: true
+
+# 当前不启用 Thanos 等额外组件。
+thanosRuler:
+  enabled: false
+
