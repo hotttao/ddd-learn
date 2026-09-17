@@ -1,0 +1,101 @@
+# 第 3 步：把已有 Ory 和 Istio 工作负载接入 observability/Prometheus。
+# ServiceMonitor/PodMonitor 只是采集声明，不会改变业务 Service 的访问路径。
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  # ServiceMonitor 对象存放在 observability，但可以跨 namespace 发现业务 Service。
+  name: kratos
+  namespace: observability
+  labels:
+    # Prometheus 的 serviceMonitorSelectorNilUsesHelmValues=false，
+    # 因此这个标签不是 Helm 必需标签，仅用于标识本实验的监控声明。
+    app.kubernetes.io/part-of: ddd-learn-observability
+spec:
+  namespaceSelector:
+    # 限定只在业务 namespace 中查找 Service，避免误采集同名 Service。
+    matchNames:
+      - ddd-learn-proxyless
+  selector:
+    # 选择 Kratos admin Service；该 Service 的 http 端口转发到容器 4434。
+    matchLabels:
+      app.kubernetes.io/name: kratos
+      app.kubernetes.io/component: admin
+  endpoints:
+    # port 使用 Service 端口名称，不是容器端口号；Prometheus 请求 /metrics。
+    - port: http
+      path: /metrics
+      # 每 30 秒抓取一次该 endpoint。
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  # 采集 Keto 专用 metrics Service，不采集 read/write 业务 API。
+  name: keto
+  namespace: observability
+  labels:
+    app.kubernetes.io/part-of: ddd-learn-observability
+spec:
+  namespaceSelector:
+    # Keto Service 位于业务 namespace，而不是 observability。
+    matchNames:
+      - ddd-learn-proxyless
+  selector:
+    # 通过组件标签选中 keto-metrics Service。
+    matchLabels:
+      app.kubernetes.io/name: keto
+      app.kubernetes.io/component: metrics
+  endpoints:
+    # Service 的 http-metrics 端口最终连接 Keto 的 metrics listener。
+    - port: http-metrics
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  # 采集 Oathkeeper 专用 metrics Service，不经过 proxy 或 api Service。
+  name: oathkeeper
+  namespace: observability
+  labels:
+    app.kubernetes.io/part-of: ddd-learn-observability
+spec:
+  namespaceSelector:
+    # Oathkeeper Service 位于业务 namespace。
+    matchNames:
+      - ddd-learn-proxyless
+  selector:
+    # 通过组件标签选中 oathkeeper-metrics Service。
+    matchLabels:
+      app.kubernetes.io/name: oathkeeper
+      app.kubernetes.io/component: metrics
+  endpoints:
+    # Service 端口名称为 http，targetPort 指向进程的 9000 metrics 端口。
+    - port: http
+      path: /metrics
+      interval: 30s
+---
+# Istio Gateway Service 只暴露 15021 和业务端口；Envoy 的 Prometheus
+# 格式指标在 Pod 的 15020 端口，因此使用 PodMonitor 直接发现 Pod。
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  # PodMonitor 自身仍存放在 observability namespace。
+  name: istio-ingress
+  namespace: observability
+  labels:
+    app.kubernetes.io/part-of: ddd-learn-observability
+spec:
+  namespaceSelector:
+    # Istio Ingress Pod 位于业务 namespace。
+    matchNames:
+      - ddd-learn-proxyless
+  selector:
+    # 选择由 Gateway API 创建的 Istio Ingress Pod。
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: istio-ingress
+  podMetricsEndpoints:
+    # Pod 端口名称 metrics 对应 15020；/stats/prometheus 是 Envoy 指标格式。
+    - port: metrics
+      path: /stats/prometheus
+      interval: 30s

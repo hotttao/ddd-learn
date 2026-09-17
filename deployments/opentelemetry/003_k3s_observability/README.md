@@ -168,8 +168,61 @@ kubectl get crd | rg 'monitoring.coreos.com'
 | `probes.monitoring.coreos.com` | 配置探针监控 |
 | `scrapeconfigs.monitoring.coreos.com` | 扩展 Prometheus 抓取配置 |
 
-本步骤尚未提交，等待确认后提交：
+第 2 步已提交：
 
 ```text
 feat(opentelemetry): stage 7 step 2 deploy prometheus stack
+```
+
+## 第 3 步：接入 Ory 和 Istio Metrics
+
+### 应用采集声明
+
+```bash
+kubectl apply -f deployments/opentelemetry/003_k3s_observability/servicemonitors/ory-istio.yaml
+```
+
+本步骤创建 3 个 `ServiceMonitor` 和 1 个 `PodMonitor`，对象都位于
+`observability` namespace，但通过 `namespaceSelector` 选择
+`ddd-learn-proxyless` 中的目标：
+
+| 对象 | 发现方式 | 目标 | 端口/路径 | 采集内容 |
+|---|---|---|---|---|
+| `ServiceMonitor/kratos` | Service 标签 | `kratos-admin` | Service 端口 `http` / `/metrics` | Kratos 指标；admin 端口同时提供管理 API 和 metrics |
+| `ServiceMonitor/keto` | Service 标签 | `keto-metrics` | `http-metrics` / `/metrics` | Keto 指标 |
+| `ServiceMonitor/oathkeeper` | Service 标签 | `oathkeeper-metrics` | Service 端口 `http` / `/metrics` | Oathkeeper 指标；进程实际监听 9000 |
+| `PodMonitor/istio-ingress` | Pod 标签 | Istio Ingress Pod | 容器端口 `metrics`（15020）/ `/stats/prometheus` | Envoy 数据面指标 |
+
+这里的 `ServiceMonitor` 不会把请求代理到 Ory 的业务端口，也不会创建新的业务
+Service。Prometheus Operator 根据它生成 scrape target，Prometheus 再从目标 Pod
+发起 HTTP 请求。`PodMonitor` 直接从 Pod 发现地址，是因为当前
+`istio-ingress-istio` Service 没有暴露 Envoy 的 15020 端口。
+
+### 为什么没有接入 xhs_grpc 和 social_grpc
+
+当前两个业务 Pod 没有暴露 Prometheus `/metrics` endpoint，也没有对应的 metrics
+端口或 ServiceMonitor。因此本步骤不修改业务代码；它们的应用指标需要后续在
+`serverhertz` 中启用并暴露独立 metrics 端口后，再增加 `ServiceMonitor`。
+
+### 验收
+
+```bash
+kubectl get servicemonitor,podmonitor -n observability
+kubectl describe servicemonitor -n observability kratos keto oathkeeper
+kubectl describe podmonitor -n observability istio-ingress
+```
+
+Prometheus Service 使用 NodePort `30090`，浏览器打开
+`http://192.168.2.41:30090/targets`，应能看到 Kratos、Keto、Oathkeeper
+和 Istio Ingress 的采集目标；PromQL 可先查询：
+
+```promql
+up{namespace="ddd-learn-proxyless"}
+```
+
+本步骤提交：
+
+```text
+feat(opentelemetry): stage 7 step 3 scrape ory and application metrics
+```
 ```

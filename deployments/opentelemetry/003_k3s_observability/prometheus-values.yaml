@@ -6,6 +6,10 @@ grafana:
 
 prometheus:
   enabled: true
+  # 通过 K3s NodePort 直接访问 Prometheus Web/API，不依赖 kubectl port-forward。
+  service:
+    type: NodePort
+    nodePort: 30090
   prometheusSpec:
     # 单节点学习环境保留 7 天指标。
     retention: 7d
@@ -49,4 +53,3 @@ prometheusOperator:
 # 当前不启用 Thanos 等额外组件。
 thanosRuler:
   enabled: false
-
