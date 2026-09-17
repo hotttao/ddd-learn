@@ -16,15 +16,41 @@ spec:
     matchNames:
       - ddd-learn-proxyless
   selector:
-    # 选择 Kratos admin Service；该 Service 的 http 端口转发到容器 4434。
+    # 选择 Kratos courier Service；courier 通过 --expose-metrics-port
+    # 在 4434 提供 metrics。kratos-admin 的 4434 是主服务 admin API，不能用于此处。
+    matchLabels:
+      app.kubernetes.io/name: kratos
+      app.kubernetes.io/component: courier
+  endpoints:
+    # port 使用 Service 端口名称；当前 Chart 对 Kratos v26.2.0 配置的 metrics 路径是
+    # /metrics/prometheus。
+    - port: http-metrics
+      path: /metrics/prometheus
+      # 每 30 秒抓取一次该 endpoint。
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  # 采集 Kratos 主进程指标；这些指标包含 Public API 的请求处理数据。
+  name: kratos-admin
+  namespace: observability
+  labels:
+    app.kubernetes.io/part-of: ddd-learn-observability
+spec:
+  namespaceSelector:
+    # kratos-admin Service 位于业务 namespace。
+    matchNames:
+      - ddd-learn-proxyless
+  selector:
+    # 选择 Kratos 主进程的 Admin Service，而不是 courier Service。
     matchLabels:
       app.kubernetes.io/name: kratos
       app.kubernetes.io/component: admin
   endpoints:
-    # port 使用 Service 端口名称，不是容器端口号；Prometheus 请求 /metrics。
+    # Kratos 主进程通过 --expose-metrics-port 在 4434 提供该路径。
     - port: http
-      path: /metrics
-      # 每 30 秒抓取一次该 endpoint。
+      path: /admin/metrics/prometheus
       interval: 30s
 ---
 apiVersion: monitoring.coreos.com/v1
@@ -47,8 +73,9 @@ spec:
       app.kubernetes.io/component: metrics
   endpoints:
     # Service 的 http-metrics 端口最终连接 Keto 的 metrics listener。
+    # Keto v26.2.0 的 Prometheus 路径是 /metrics/prometheus。
     - port: http-metrics
-      path: /metrics
+      path: /metrics/prometheus
       interval: 30s
 ---
 apiVersion: monitoring.coreos.com/v1

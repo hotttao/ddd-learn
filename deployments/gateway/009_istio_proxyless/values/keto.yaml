@@ -26,6 +26,10 @@ keto:
       write:
         host: 0.0.0.0
         port: 4467
+      metrics:
+        # 显式绑定所有网卡，使 Prometheus 可以从 Pod 网络访问 metrics。
+        host: 0.0.0.0
+        port: 4468
     namespaces:
       location: file:///etc/keto-namespaces/namespaces.ts
     dsn: postgres://keto:keto@ddd-learn-postgres-rw:5432/keto?sslmode=disable

@@ -188,8 +188,9 @@ kubectl apply -f deployments/opentelemetry/003_k3s_observability/servicemonitors
 
 | 对象 | 发现方式 | 目标 | 端口/路径 | 采集内容 |
 |---|---|---|---|---|
-| `ServiceMonitor/kratos` | Service 标签 | `kratos-admin` | Service 端口 `http` / `/metrics` | Kratos 指标；admin 端口同时提供管理 API 和 metrics |
-| `ServiceMonitor/keto` | Service 标签 | `keto-metrics` | `http-metrics` / `/metrics` | Keto 指标 |
+| `ServiceMonitor/kratos-admin` | Service 标签 | `kratos-admin` | Service 端口 `http` / `/admin/metrics/prometheus` | Kratos 主进程指标，包含 Public API 指标；主进程使用 4434 暴露 |
+| `ServiceMonitor/kratos` | Service 标签 | `kratos-courier` | Service 端口 `http-metrics` / `/metrics/prometheus` | Kratos courier 指标；courier 使用 4434 暴露 metrics |
+| `ServiceMonitor/keto` | Service 标签 | `keto-metrics` | `http-metrics` / `/metrics/prometheus` | Keto 指标 |
 | `ServiceMonitor/oathkeeper` | Service 标签 | `oathkeeper-metrics` | Service 端口 `http` / `/metrics` | Oathkeeper 指标；进程实际监听 9000 |
 | `PodMonitor/istio-ingress` | Pod 标签 | Istio Ingress Pod | 容器端口 `metrics`（15020）/ `/stats/prometheus` | Envoy 数据面指标 |
 
