@@ -1,0 +1,65 @@
+# grafana/loki 7.3.0，内置 Loki 3.6.12。
+# 当前是单节点 K3s 学习环境，使用 SingleBinary + local-path PVC。
+
+# Loki 的部署拓扑；SingleBinary 将读、写、查询和压缩组件放进一个进程。
+deploymentMode: SingleBinary
+
+loki:
+  # 实验环境暂不启用多租户鉴权；生产环境应启用并配置 tenant/header 鉴权。
+  auth_enabled: false
+  # Loki 数据在单副本模式下只需要写入一份。
+  commonConfig:
+    replication_factor: 1
+  # 使用本地文件系统保存 chunks 和 index；生产环境应改为 S3/MinIO 等对象存储。
+  storage:
+    type: filesystem
+  # TSDB 是当前 Loki 推荐的索引存储方式。
+  schemaConfig:
+    configs:
+      - from: "2024-04-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+  storage_config:
+    filesystem:
+      # 日志块文件目录，对应 StatefulSet 的持久化目录。
+      directory: /var/loki/chunks
+    tsdb_shipper:
+      # 活跃索引和本地索引缓存目录。
+      active_index_directory: /var/loki/tsdb-index
+      cache_location: /var/loki/tsdb-cache
+  server:
+    # Loki HTTP API、日志写入和查询端口。
+    http_listen_port: 3100
+    # Loki 内部 gRPC 端口。
+    grpc_listen_port: 9095
+  limits_config:
+    # 允许接收最近 7 天内的日志样本。
+    reject_old_samples: true
+    reject_old_samples_max_age: 168h
+
+singleBinary:
+  # 单节点环境只启动一个 Loki 实例。
+  replicas: 1
+  persistence:
+    # 为 Loki 数据目录创建 PVC，避免 Pod 重建后日志索引丢失。
+    enabled: true
+    # 当前 K3s 默认的本地动态存储类。
+    storageClass: local-path
+    # 学习环境分配 10Gi 存储。
+    size: 10Gi
+
+# SingleBinary 模式不使用以下读写拆分组件；显式关闭，避免误创建额外工作负载。
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# 当前只部署 Loki 后端，不额外安装 Gateway/Ingress。
+gateway:
+  enabled: false
