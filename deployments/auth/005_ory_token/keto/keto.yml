@@ -1,0 +1,26 @@
+# Keto 配置文件格式版本。
+# Keto v26.2.0 使用的配置 schema 版本。
+version: v0.8.0-alpha.2
+
+serve:
+  read:
+    # Read API 监听所有容器网络接口，供 xhs_service 调用。
+    host: 0.0.0.0
+    # Read API 端口，提供权限检查和读取接口。
+    port: 4466
+  write:
+    # Write API 监听所有容器网络接口，供可信初始化或管理服务调用。
+    host: 0.0.0.0
+    # Write API 端口，写入和删除 Relation Tuple。
+    port: 4467
+
+namespaces:
+  # OPL 文件的位置；Keto 启动时加载 User 和 Organization 模型。
+  location: file:///etc/config/keto/namespaces.ts
+
+# Keto 使用同一个 PostgreSQL 实例中的独立逻辑数据库，不与 Kratos 共用数据库。
+dsn: postgres://keto:keto@postgres:5432/keto?sslmode=disable
+
+log:
+  # 教学环境使用 info 日志，便于观察启动和请求。
+  level: info

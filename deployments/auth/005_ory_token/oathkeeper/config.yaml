@@ -1,0 +1,67 @@
+# Oathkeeper v26.2.0 的运行配置。
+serve:
+  api:
+    # Decision API 和 /.well-known/jwks.json 的监听地址。
+    host: 0.0.0.0
+    # Traefik 使用这个端口调用 /decisions；内部服务也从这里获取 JWKS 公钥。
+    port: 4456
+  proxy:
+    # Oathkeeper serve 会同时启动 Reverse Proxy；本模块不对宿主机映射此端口。
+    host: 0.0.0.0
+    port: 4455
+
+access_rules:
+  # 从容器内的只读文件加载 Access Rules。
+  repositories:
+    - file:///etc/oathkeeper/rules.yaml
+
+authenticators:
+  cookie_session:
+    # 使用 Kratos Session Cookie 作为外部认证凭证。
+    enabled: true
+    config:
+      # Oathkeeper 在内部网络中查询 Kratos Public API。
+      check_session_url: http://kratos:4433/sessions/whoami
+      # 保留原始请求信息，供 Decision API 和后续 Rule 使用。
+      preserve_path: true
+      # 把 Kratos 返回的 identity.id 转成 Oathkeeper Subject。
+      subject_from: identity.id
+      # 只接受 Kratos 的 Session Cookie，不接受任意 Cookie。
+      only:
+        - ory_kratos_session
+
+authorizers:
+  allow:
+    # 本步骤只验证“已登录”，业务权限留给后续模块。
+    enabled: true
+
+mutators:
+  id_token:
+    # 将已验证的 Subject 转换为下游使用的 Internal JWT。
+    enabled: true
+    config:
+      # 生成 JWT 的 iss；xhs_service 会校验这个值。
+      issuer_url: http://oathkeeper:4456/
+      # 读取第 2 步生成的包含私钥的 JWKS 文件。
+      jwks_url: file:///etc/oathkeeper/id_token.jwks.json
+      # JWT 有效期；短期 Token 降低泄露后的重放窗口。
+      ttl: 5m
+      # 配置业务服务需要的自定义 Claim；sub、iss、iat、nbf、exp、jti 由 Oathkeeper 补充。
+      claims: |
+        {
+          "aud": ["internal-api"],
+          "principal_type": "user"
+        }
+
+errors:
+  # Decision API 以 JSON 错误响应结束，不跳转浏览器登录页。
+  fallback:
+    - json
+  handlers:
+    json:
+      enabled: true
+
+log:
+  # 教学环境使用结构化日志，便于观察 Rule 和 Decision API。
+  level: info
+  format: json
