@@ -18,6 +18,40 @@ services:
       # 第一次初始化时创建 Keto 数据库和独立数据库用户。
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
 
+  talos-migrate:
+    # Talos OSS 使用 SQLite；该一次性 Job 初始化 Talos 数据库表。
+    image: ghcr.io/hotttao/ory-talos:v26.2.0
+    command:
+      - migrate
+      - up
+      - --database
+      - sqlite3:///var/lib/talos/talos.db?_journal_mode=WAL
+    volumes:
+      # migration Job 和 talos 服务共享同一个 SQLite 文件。
+      - auth-005-talos:/var/lib/talos
+
+  talos:
+    # Talos 管理 API Key 的签发、验证、轮换、撤销和派生。
+    image: ghcr.io/hotttao/ory-talos:v26.2.0
+    command:
+      - serve
+      - --config
+      - /etc/talos/config.yaml
+    depends_on:
+      talos-migrate:
+        condition: service_completed_successfully
+    environment:
+      # 仅用于本地教学；生产环境必须通过 Secret 注入。
+      TALOS_HMAC_SECRET: \${TALOS_HMAC_SECRET:-ddd-learn-talos-hmac-secret-2026}
+    volumes:
+      - ./talos/config.yaml:/etc/talos/config.yaml:ro
+      - auth-005-talos:/var/lib/talos
+    ports:
+      # Talos Public/Admin API 共用 HTTP 端口，通过 URL 路径区分。
+      - "192.168.2.41:4420:4420"
+      # Prometheus metrics 端口，不承载 API 请求。
+      - "192.168.2.41:4422:4422"
+
   keto-migrate:
     # 创建 Keto 所需的数据库表和索引；这是一次性 Compose Job。
     image: ghcr.io/hotttao/ory-keto:v26.2.0
@@ -184,3 +218,5 @@ services:
 volumes:
   # 005 使用自己的 Kratos/PostgreSQL 数据存储，与 003_keto 隔离。
   auth-005-postgres:
+  # Talos OSS 使用单节点 SQLite，和 PostgreSQL 数据分开。
+  auth-005-talos:

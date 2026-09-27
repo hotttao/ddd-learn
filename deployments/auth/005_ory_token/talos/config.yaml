@@ -1,0 +1,46 @@
+# Talos OSS 单节点教学配置。
+# API Key 的创建、验证、轮换、撤销和派生由 Talos 负责；业务权限仍由 Keto 判断。
+
+serve:
+  http:
+    # Public API 和 Admin API 共用这个监听面，通过 URL 路径区分。
+    host: 0.0.0.0
+    port: 4420
+  metrics:
+    # Prometheus metrics 独立监听，不承载 API 请求。
+    host: 0.0.0.0
+    port: 4422
+
+credentials:
+  # 验证结果中的 issuer；本地教学使用局域网地址。
+  issuer: http://192.168.2.41:4420
+  api_keys:
+    # 新 API Key 默认有效期 30 天。
+    default_ttl: 720h
+    # 单个 API Key 允许的最长有效期为一年。
+    max_ttl: 8760h
+    prefix:
+      # API Key 的可见前缀，便于识别环境；不是安全凭证。
+      current: ddd
+      retired: []
+  # Step 1 只验证长期 API Key；短期派生 JWT 在后续步骤单独配置签名密钥。
+
+db:
+  # Talos OSS 使用单节点 SQLite；后续若使用商业版再切换 PostgreSQL。
+  dsn: sqlite3:///var/lib/talos/talos.db?_journal_mode=WAL
+
+secrets:
+  hmac:
+    # Talos 用 HMAC 保护 API Key 的完整性；生产环境必须使用 Secret Manager。
+    # 这是仅用于本地教学的 32 字符开发值。
+    current: ddd-learn-talos-hmac-secret-2026
+    retired: []
+
+cache:
+  # 教学环境先关闭缓存，便于观察撤销立即生效。
+  type: noop
+  ttl: 5m
+
+log:
+  level: info
+  format: json

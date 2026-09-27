@@ -18,6 +18,17 @@ Authorization Code、Consent、OAuth2 Client 和 OAuth2 Access Token；本实验
 本实验不修改 deployments/auth/003_keto，而是复制它创建独立的
 deployments/auth/005_ory_token。
 
+Kratos 和 Keto 使用 PostgreSQL；Talos OSS 按当前版本限制使用独立 SQLite：
+
+~~~text
+PostgreSQL
+├── ory  → Kratos
+└── keto → Keto
+
+SQLite Volume
+└── Talos
+~~~
+
 ## 一、组件职责
 
 ```text
@@ -107,7 +118,7 @@ Token Manager ──> Talos Admin API
 | 4433 | Kratos Public API | 用户登录、注册、Session |
 | 4434 | Kratos Admin API | 身份查询和初始化 |
 | 4420 | Talos Public API | API Key 校验和派生 |
-| 4422 | Talos Health API | 健康检查 |
+| 4422 | Talos Metrics API | Prometheus 指标 |
 | 4456 | Oathkeeper Decision API | Traefik 认证决策 |
 | 4466 | Keto Read API | 业务权限检查 |
 | 4467 | Keto Write API | Relation Tuple 管理 |
@@ -116,6 +127,8 @@ Token Manager ──> Talos Admin API
 | 8025 | Mailpit | 教学邮件查看 |
 
 Talos Public API 和 Admin API 使用同一个 HTTP 监听端口，通过不同的 API 路径区分。
+健康检查使用 talos:4420/health/alive 和 /health/ready；Prometheus 指标使用独立
+的 4422 端口。
 Talos Admin API 没有内置认证，不能直接暴露给浏览器。只有 Token Manager 可以
 访问 Admin API，并且 Token Manager 必须验证当前用户的 Kratos Session 和 Keto 权限。
 
@@ -226,7 +239,8 @@ Token 不影响 Kratos Session 和其他 Token。轮换生成新 Secret 并撤�
 
 ### Step 1：部署 Talos
 
-增加 talos、talos-migrate、配置和密钥，验证 Public、Admin 和 Health 接口。
+增加 talos、talos-migrate、SQLite 数据卷和配置，验证 Public、Admin、Health 和
+Metrics 接口。Talos OSS 不能使用 PostgreSQL；商业版再单独切换。
 
 ### Step 2：创建和验证服务 API Token
 
