@@ -201,6 +201,9 @@ CLI 或服务实际使用的凭证；`key_id` 不能代替 `secret`。
 - `POST http://192.168.2.41:8090/v1/auth/tokens/{id}/revoke`
 - `POST http://192.168.2.41:8090/v1/auth/tokens/{id}/rotate`
 
+用户侧可以使用仓库中的 `token_manager/user-token-example.sh` 调用这些接口。脚本要求
+通过 `KRATOS_SESSION_COOKIE` 传入登录后的 `ory_kratos_session`，不会在脚本中保存账号密码。
+
 ### Step 4：接入用户 API Token
 
 让 Alice 和 Bob 通过 Kratos Session 创建自己的 API Token，验证主体、组织、Scope

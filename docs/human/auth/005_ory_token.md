@@ -334,6 +334,32 @@ Token Manager 和 Talos 保存的是两层不同的数据：
 让 Alice 和 Bob 通过 Kratos Session 创建自己的 API Token，验证主体、组织、Scope
 和生命周期。
 
+当前步骤使用已经登录的 Kratos Session Cookie 调用 Token Manager。浏览器登录后，从
+开发者工具复制 `ory_kratos_session` Cookie，再执行：
+
+```shell
+KRATOS_SESSION_COOKIE='ory_kratos_session=...' \
+  ./token_manager/user-token-example.sh create
+
+KRATOS_SESSION_COOKIE='ory_kratos_session=...' \
+  ./token_manager/user-token-example.sh list
+```
+
+创建响应中的 `secret` 只展示这一次，应立即交给 CLI 或服务安全保存。响应中的
+`token.id` 是后续撤销和轮换使用的 Token Manager ID：
+
+```shell
+KRATOS_SESSION_COOKIE='ory_kratos_session=...' \
+  ./token_manager/user-token-example.sh rotate tm_...
+
+KRATOS_SESSION_COOKIE='ory_kratos_session=...' \
+  ./token_manager/user-token-example.sh revoke tm_...
+```
+
+使用 Alice 的 Session 查询时只能得到 Alice 的 Token；换成 Bob 的 Session 后只能得到
+Bob 的 Token。Token Manager 通过 `owner_identity_id` 做数据隔离，当前步骤还不把 Scope
+解释为 Keto 权限，Scope 与组织权限的绑定放在后续步骤处理。
+
 ### Step 5：接入 Oathkeeper
 
 保留两条认证链路：
