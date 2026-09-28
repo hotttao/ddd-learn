@@ -244,8 +244,15 @@ Metrics 接口。Talos OSS 不能使用 PostgreSQL；商业版再单独切换。
 
 ### Step 2：创建和验证服务 API Token
 
-由初始化脚本创建 Service:social-service 和 Service:xhs-service，先不接 UI，
-验证服务使用 API Token 请求 xhs_service。
+由手动执行的一次性 talos-seed 创建 Service:social-service 和
+Service:xhs-service，验证 Talos 签发和 apiKeys:verify。
+
+本步骤不验证 xhs_service 访问，因为 Oathkeeper 尚未接入 Talos；业务接口访问放在
+Step 5。
+
+~~~shell
+docker compose -f deployments/auth/005_ory_token/docker-compose.yml run --rm talos-seed
+~~~
 
 ### Step 3：实现 Token Manager
 

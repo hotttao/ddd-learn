@@ -52,6 +52,20 @@ services:
       # Prometheus metrics 端口，不承载 API 请求。
       - "192.168.2.41:4422:4422"
 
+  talos-seed:
+    # 手动执行的一次性 Job，创建内部服务 API Token。
+    # 不放入默认启动链路，避免每次启动都生成新凭证。
+    image: m.daocloud.io/docker.io/curlimages/curl:8.10.1
+    entrypoint: ["/bin/sh"]
+    command: ["/etc/config/talos/seed-service-keys.sh"]
+    depends_on:
+      talos:
+        condition: service_started
+    environment:
+      TALOS_URL: http://talos:4420
+    volumes:
+      - ./talos:/etc/config/talos:ro
+
   keto-migrate:
     # 创建 Keto 所需的数据库表和索引；这是一次性 Compose Job。
     image: ghcr.io/hotttao/ory-keto:v26.2.0
