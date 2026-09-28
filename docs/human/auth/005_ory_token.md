@@ -444,7 +444,31 @@ social-service + xhs.read     → 按 Keto 结果决定
 
 ### Step 7：增加派生短期 Token
 
-使用 Talos 派生短期 JWT 或 Macaroon，比较本地验签和实时撤销的差异。
+使用 Talos 根据长期 API Token 派生短期 JWT，比较本地验签和实时撤销的差异。
+
+本步骤增加：
+
+- `talos/derived-jwks.json`：Talos 用于签发派生 JWT 的 Ed25519 JWKS；私钥只挂载给 Talos。
+- `credentials.derived_tokens`：默认有效期 15 分钟，并显式指定 `kid`。
+- `GET /v2alpha1/derivedKeys/jwks.json`：发布只包含公钥的 JWKS，供验证方本地验签。
+- `POST /v2alpha1/admin/apiKeys:derive`：用长期 API Token 派生 JWT。
+
+派生 JWT 会继承父 Token 的 Scope，但有效期更短。业务 Gateway 可以本地验证该 JWT，
+不必每个请求都调用 Talos `apiKeys:verify`。
+
+本实验验证结果：
+
+```text
+派生 JWT，父 API Key 撤销前验证：true
+派生 JWT，父 API Key 撤销后验证：true
+```
+
+| 模式 | 每次请求 | 父 Key 撤销后的效果 | 适用场景 |
+| --- | --- | --- | --- |
+| API Key `apiKeys:verify` | 查询 Talos | 可以较快感知撤销 | 要求实时撤销 |
+| 派生 JWT 本地验签 | 只验证签名和 `exp` | 已签发 JWT 继续有效到期 | 高吞吐、边缘 Gateway |
+
+派生 JWT 必须设置较短 TTL，不能把长期 API Token 直接换成另一个长期 Token。
 
 ### Step 8：增加管理员管理和审计
 

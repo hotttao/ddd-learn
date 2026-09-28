@@ -63,6 +63,8 @@ services:
       TALOS_HMAC_SECRET: \${TALOS_HMAC_SECRET:-ddd-learn-talos-hmac-secret-2026}
     volumes:
       - ./talos/config.yaml:/etc/talos/config.yaml:ro
+      # 派生 JWT 的签名私钥只挂载给 Talos；验证方通过 derivedKeys JWKS 获取公钥。
+      - ./talos/derived-jwks.json:/etc/talos/derived-jwks.json:ro
       - auth-005-talos:/var/lib/talos
     ports:
       # Talos Public/Admin API 共用 HTTP 端口，通过 URL 路径区分。

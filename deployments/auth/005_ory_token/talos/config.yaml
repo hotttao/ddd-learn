@@ -23,7 +23,16 @@ credentials:
       # API Key 的可见前缀，便于识别环境；不是安全凭证。
       current: ddd
       retired: []
-  # Step 1 只验证长期 API Key；短期派生 JWT 在后续步骤单独配置签名密钥。
+  derived_tokens:
+    # 派生 Token 默认有效期；远小于长期 API Key，降低泄露影响范围。
+    default_ttl: 15m
+    jwt:
+      # 显式选择签名 key，避免依赖 JWKS 中的 key 顺序。
+      signing_key_id: ddd-learn-derived-2026
+      signing_keys:
+        urls:
+          # 当前 Talos v26.2.0 Schema 只接受 base64:// JWKS，不接受 file://。
+          - base64://eyJrZXlzIjpbeyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJkIjoiREJqcWpuVVRtQVBjYnFURVBkYk1UQjhtOVVGRnZMUm1wcWRZRlY1TnBUUSIsImtpZCI6ImRkZC1sZWFybi1kZXJpdmVkLTIwMjYiLCJrdHkiOiJPS1AiLCJ1c2UiOiJzaWciLCJ4IjoibFRvNVBqS1ZsRFdWS052bzZyRFRoRDU4bVloY21KWGlndThSczN2R3VfRSJ9XX0K
 
 db:
   # Talos OSS 使用单节点 SQLite；后续若使用商业版再切换 PostgreSQL。

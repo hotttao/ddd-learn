@@ -246,8 +246,26 @@ API Token 的 Scope 作为能力上限写入 Internal JWT，xhs_service 再将�
 
 ### Step 7：增加派生短期 Token
 
-使用 Talos 将长期 API Key 派生为短期 JWT 或 Macaroon，比较本地验签和实时
-撤销的差异。
+Talos 根据长期 API Key 签发短期 JWT。本步骤使用 Ed25519 JWKS：
+
+```text
+talos/derived-jwks.json
+        │ 私钥只挂载给 Talos
+        ▼
+Talos /v2alpha1/admin/apiKeys:derive
+        │ 短期 JWT
+        ▼
+Gateway 使用 /v2alpha1/derivedKeys/jwks.json 的公钥本地验签
+```
+
+当前 Talos v26.2.0 的配置 Schema 要求 `signing_keys.urls` 使用 `base64://`，所以
+`config.yaml` 内保存的是 JWKS 的 base64 内容；Compose 中挂载的 JSON 文件用于保留
+密钥来源和教学查看，Talos 实际按配置中的 base64 内容加载。
+
+本步骤验证结果：派生 JWT 在父 API Key 撤销前后都能通过 Talos 验证。原因是派生 JWT
+是自包含凭证，撤销父 Key 不会主动回溯已经签发的 JWT；它会持续有效到自身 `exp`。
+因此生产环境应使用短 TTL；如果要求实时撤销，则继续在请求链路调用 Talos `verify`，
+不要只依赖派生 JWT 本地验签。
 
 ### Step 8：完成审计和生命周期验证
 
