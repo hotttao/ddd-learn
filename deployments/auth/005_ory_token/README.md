@@ -20,7 +20,7 @@ Keto 授权
 xhs_service
 ```
 
-当前已经创建 Docker Compose、Talos 配置和 Token Manager 服务；Token Manager 的网关接入
+当前已经创建 Docker Compose、Talos 配置、Token Manager 和 ui_example 静态服务；Token Manager 的网关接入
 留到后续步骤。
 本目录不会修改 deployments/auth/003_keto。
 
@@ -71,10 +71,12 @@ SQLite Volume
 | 4466 | Keto Read API | 业务权限检查 |
 | 4467 | Keto Write API | Relation Tuple 管理 |
 | 8090 | Token Manager | 用户和管理员 Token 管理 API |
-| 8080 | Traefik | 对外统一入口 |
+| 8080 | Traefik + ui_example | 对外统一入口和静态首页 |
 | 8025 | Mailpit | 教学邮件查看 |
 
-Talos Public API 和 Admin API 使用同一个 HTTP 监听端口，通过不同的 API 路径区分。
+访问 `http://192.168.2.41:8080/` 可打开 ui_example 首页；页面的 `/kratos` 和 `/v1` 请求
+继续由同一个 Traefik 转发到认证和业务服务。Talos Public API 和 Admin API 使用同一个 HTTP
+监听端口，通过不同的 API 路径区分。
 健康检查使用 talos:4420/health/alive 和 /health/ready；Prometheus 指标使用独立
 的 4422 端口。
 Talos Admin API 没有内置认证，不能直接暴露给浏览器。只有 Token Manager 可以
@@ -237,7 +239,10 @@ API Token      → Talos      → Internal JWT → xhs_service
 
 ### Step 6：接入 Keto
 
-验证 Alice、Bob 和内部服务的权限矩阵。
+API Token 的 Scope 作为能力上限写入 Internal JWT，xhs_service 再将其与 Keto 的组织
+权限叠加判断：`xhs.crawl.start` 对应 `start_crawl`，`xhs.read` 对应 `view_content`，
+`xhs.crawl.keywords` 对应 `modify_keywords`。没有 API Token Scope 的 Kratos Session
+仍直接由 Keto 判断；有 Scope 时必须同时满足 Scope 和 Keto。
 
 ### Step 7：增加派生短期 Token
 

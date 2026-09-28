@@ -267,11 +267,22 @@ services:
     depends_on:
       kratos:
         condition: service_started
+      ui-example:
+        condition: service_started
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
     ports:
       - "192.168.2.41:8080:80"
+
+  ui-example:
+    # 使用 ui_example 自带的 Vite 构建和 Nginx 静态文件镜像。
+    image: ui_example:0.0.1
+    build:
+      context: ../../../ui_example
+      dockerfile: Dockerfile
+    expose:
+      - "80"
 
 volumes:
   # 005 使用自己的 Kratos/PostgreSQL 数据存储，与 003_keto 隔离。

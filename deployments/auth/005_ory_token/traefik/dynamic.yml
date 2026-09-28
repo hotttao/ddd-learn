@@ -28,6 +28,15 @@ http:
 
   # routers 负责匹配进入 Traefik 的请求，并选择 Middleware 和后端 Service。
   routers:
+    # ui-example 是默认首页；更具体的 /kratos 和 /v1/xhs Router 会优先匹配。
+    ui-example:
+      entryPoints:
+        - web
+      # 根路径是兜底路由；API Router 使用更高优先级，避免被首页接管。
+      priority: 1
+      rule: PathPrefix(`/`)
+      service: ui-example
+
     # kratos-public 是 Kratos Public API Router 的名称，仅用于 Traefik 配置内部引用。
     kratos-public:
       # entryPoints 限定这个 Router 监听哪些入口。
@@ -36,6 +45,8 @@ http:
         - web
       # rule 定义路由匹配条件；这里只接收路径以 /kratos 开头的请求。
       rule: PathPrefix(`/kratos`)
+      # 优先于 ui-example 的根路径兜底规则。
+      priority: 100
       # middlewares 按列表顺序处理匹配到的请求。
       middlewares:
         # 转发前删除对外使用的 /kratos 前缀。
@@ -50,11 +61,22 @@ http:
         - web
       # 只匹配 xhs_service 的 /v1/xhs 前缀，不匹配 /kratos/ 或其他服务前缀。
       rule: PathPrefix(`/v1/xhs`)
+      # 优先于 ui-example 的根路径兜底规则。
+      priority: 100
       # 业务请求必须先通过 Oathkeeper Decision API。
       middlewares:
         - oathkeeper-forward-auth
       # 允许后才转发到 xhs_service。
       service: xhs-api
+
+    # token-manager 使用 Kratos Session Cookie 保护用户自己的 API Token。
+    token-manager:
+      entryPoints:
+        - web
+      # 只暴露用户 Token 管理 API，不暴露内部 verify 接口。
+      rule: PathPrefix(`/v1/auth/tokens`)
+      priority: 100
+      service: token-manager
 
   # services 描述 Traefik 最终把请求转发到哪些后端实例。
   services:
@@ -73,3 +95,14 @@ http:
         # xhs_service 会在后续步骤加入本模块 Compose；当前只先固定路由边界。
         servers:
           - url: http://xhs_service:8082
+
+    token-manager:
+      loadBalancer:
+        servers:
+          - url: http://token-manager:8090
+
+    # 静态前端只负责返回已构建的 HTML/CSS/JS，不代理 API。
+    ui-example:
+      loadBalancer:
+        servers:
+          - url: http://ui-example:80
