@@ -3,6 +3,7 @@ import { Link, Route, Routes } from "react-router-dom";
 import { getIdentitySummary } from "@/domains/auth/lib/session";
 import { useOrySession } from "@/foundation/providers/ory-session";
 import AccountSettingsPage from "@/pages/auth/AccountSettingsPage";
+import ApiTokensPage from "@/pages/auth/ApiTokensPage";
 import AuthFlowPage from "@/pages/auth/AuthFlowPage";
 import RecoveryFlowPage from "@/pages/auth/RecoveryFlowPage";
 import SessionPage from "@/pages/auth/SessionPage";
@@ -22,6 +23,7 @@ function AuthNavigation() {
         <span className="brand-nav__identity">{identity.displayName}</span>
         <Link to="/xhs">{t("navigation.xhsConsole")}</Link>
         <Link to="/social">Social console</Link>
+        <Link to="/tokens">API Tokens</Link>
         <Link to="/settings">{t("navigation.accountSettings")}</Link>
         <button
           className="brand-nav__button"
@@ -71,6 +73,7 @@ export default function App() {
           <Route path="/recovery" element={<RecoveryFlowPage />} />
           <Route path="/verification" element={<VerificationFlowPage />} />
           <Route path="/settings" element={<AccountSettingsPage />} />
+          <Route path="/tokens" element={<ApiTokensPage />} />
           <Route path="/xhs" element={<XhsConsolePage />} />
           <Route path="/social" element={<SocialConsolePage />} />
           <Route path="*" element={<SessionPage />} />

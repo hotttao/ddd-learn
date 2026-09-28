@@ -46,7 +46,8 @@ async function request<T>(path: string, headers?: Record<string, string>): Promi
 }
 
 export function listMyOrganizations(): Promise<SocialRequestResult<ListOrganizationsResponse>> {
-  return request("/v1/social/me/organizations");
+  // 当前 005 部署由 xhs_service 提供组织关系；Social 只负责聚合内容。
+  return request("/v1/xhs/me/organizations");
 }
 
 export function searchContents(

@@ -90,8 +90,8 @@ export function startCrawlTask(
 export function listMyOrganizations(): Promise<
   XhsRequestResult<ListMyOrganizationsResponse>
 > {
-  // 组织上下文由 Social 聚合服务提供；XHS 页面只消费这个结果。
-  return request("GET", "/v1/social/me/organizations");
+  // 当前 005 架构由 xhs_service 返回用户所属组织；Social 是另一条实验链路。
+  return request("GET", "/v1/xhs/me/organizations");
 }
 
 export function listCrawlContents(

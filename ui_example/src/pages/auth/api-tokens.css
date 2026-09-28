@@ -1,0 +1,19 @@
+.api-tokens-page { width: min(100%, 66rem); padding: clamp(1.5rem, 4vw, 3rem); border: 1px solid var(--app-color-border); border-radius: 1.5rem; background: rgba(10, 17, 33, 0.82); box-shadow: 0 2rem 6rem rgba(0, 0, 0, 0.3); }
+.api-tokens-page h1 { margin: 0.65rem 0; color: var(--app-color-text); font-size: clamp(2rem, 5vw, 3.5rem); letter-spacing: -0.05em; }
+.api-tokens-page header p { max-width: 42rem; color: var(--app-color-text-secondary-strong); line-height: 1.7; }
+.api-token-form { display: grid; grid-template-columns: 1.2fr 1.2fr 0.7fr auto; gap: 0.8rem; align-items: end; margin-top: 2rem; }
+.api-token-form label { display: grid; gap: 0.4rem; color: var(--app-color-text-soft); font-size: 0.8rem; font-weight: 700; }
+.api-token-form input { min-height: 2.8rem; box-sizing: border-box; padding: 0 0.8rem; border: 1px solid var(--app-color-border); border-radius: 0.7rem; color: var(--app-color-text); background: var(--app-color-input-surface); font: inherit; }
+.api-token-form button, .api-token-list button { min-height: 2.8rem; padding: 0 0.9rem; border: 1px solid rgba(144, 160, 255, 0.35); border-radius: 0.7rem; color: #eef2ff; background: linear-gradient(135deg, rgba(89, 107, 244, 0.85), rgba(69, 100, 215, 0.85)); cursor: pointer; font: inherit; font-weight: 700; }
+.api-token-secret { display: grid; gap: 0.5rem; margin-top: 1.5rem; padding: 1rem; border: 1px solid rgba(82, 211, 189, 0.35); border-radius: 0.8rem; background: rgba(82, 211, 189, 0.08); color: var(--app-color-text); }
+.api-token-secret p, .api-token-list p { margin: 0; color: var(--app-color-text-muted); }
+.api-token-secret code { overflow-wrap: anywhere; color: #6be0c9; }
+.api-token-error { margin-top: 1rem; color: #ff9b9b; }
+.api-token-list { margin-top: 2rem; }
+.api-token-list__heading { display: flex; align-items: center; justify-content: space-between; }
+.api-token-list__heading h2 { color: var(--app-color-text); }
+.api-token-card { display: flex; justify-content: space-between; gap: 1rem; margin-top: 0.8rem; padding: 1rem; border: 1px solid var(--app-color-border); border-radius: 0.8rem; background: var(--app-color-surface-soft); color: var(--app-color-text); }
+.api-token-card div { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+.api-token-card small { color: var(--app-color-text-muted); }
+.api-token-card span { padding: 0.2rem 0.45rem; border-radius: 0.3rem; background: rgba(144, 160, 255, 0.14); font-size: 0.7rem; }
+@media (max-width: 760px) { .api-token-form { grid-template-columns: 1fr; } .api-token-card { flex-direction: column; } }
