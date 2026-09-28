@@ -256,8 +256,78 @@ docker compose -f deployments/auth/005_ory_token/docker-compose.yml run --rm tal
 
 ### Step 3：实现 Token Manager
 
-实现用户 Token 创建、查询、撤销和轮换接口。Token Manager 不保存可恢复的完整
-Token，不向浏览器暴露 Talos Admin API。
+新增 `token_manager` 服务，提供用户 Token 创建、查询、撤销和轮换接口。服务先通过
+Kratos `GET /sessions/whoami` 获取当前用户，再调用 Talos Admin API；Token Manager
+只保存自己的元数据和 Talos `key_id`，不保存可恢复的完整 Secret，也不向浏览器暴露
+Talos Admin API。
+
+本步骤接口：
+
+- `POST http://192.168.2.41:8090/v1/auth/tokens`
+- `GET http://192.168.2.41:8090/v1/auth/tokens`
+- `POST http://192.168.2.41:8090/v1/auth/tokens/{id}/revoke`
+- `POST http://192.168.2.41:8090/v1/auth/tokens/{id}/rotate`
+
+创建和轮换响应中的 `secret` 只返回一次；当前步骤直接暴露 8090 便于学习，后续再接入
+网关和 Oathkeeper。
+
+#### Token 元数据与 Talos API Key 的对应关系
+
+Token Manager 和 Talos 保存的是两层不同的数据：
+
+```json
+// Token Manager PostgreSQL：api_tokens 表中的一行
+{
+  "id": "tm_1740000000000000000",
+  "owner_identity_id": "kratos-identity-id-alice",
+  "talos_key_id": "01JEXAMPLEKEYID00000000001",
+  "name": "alice-cli",
+  "scopes": ["xhs.read", "xhs.crawl.start"],
+  "status": "KEY_STATUS_ACTIVE",
+  "expire_time": "2027-09-28T00:00:00Z"
+}
+```
+
+其中 `talos_key_id` 是 Token Manager 与 Talos 之间的关联字段。Talos 的 API Key
+元数据大致如下：
+
+```json
+// Talos GET /v2alpha1/admin/issuedApiKeys/{key_id} 的结果
+{
+  "key_id": "01JEXAMPLEKEYID00000000001",
+  "name": "alice-cli",
+  "actor_id": "User:kratos-identity-id-alice",
+  "scopes": ["xhs.read", "xhs.crawl.start"],
+  "status": "KEY_STATUS_ACTIVE",
+  "create_time": "2026-09-28T00:00:00Z",
+  "expire_time": "2027-09-28T00:00:00Z"
+}
+```
+
+创建时 Talos 另外返回一次性 Secret：
+
+```json
+// Talos POST /v2alpha1/admin/issuedApiKeys 的响应
+{
+  "issued_api_key": {
+    "key_id": "01JEXAMPLEKEYID00000000001"
+  },
+  "secret": "ddd_live_<opaque-secret>"
+}
+```
+
+三者关系是：
+
+| 数据 | 保存位置 | 作用 |
+| --- | --- | --- |
+| `token_manager.id` | Token Manager PostgreSQL | 面向用户管理的业务 Token ID |
+| `talos_key_id` / `key_id` | Token Manager 元数据、Talos 元数据 | 定位 Talos 中的这把 API Key |
+| `secret` | 创建或轮换响应中临时出现 | CLI 或服务实际携带的凭证；Token Manager 和 Talos 都不提供再次读取 |
+
+因此，`key_id` 不是 API Token 本身，也不能替代 Secret 调用业务接口。用户实际保存
+的是 `secret`；用户在管理页面看到的应该是 Token Manager 的 `id`、名称、Scope、状态
+和过期时间。撤销或轮换时，Token Manager 使用保存的 `talos_key_id` 调用 Talos，
+不需要也不能重新读取旧 Secret。
 
 ### Step 4：接入用户 API Token
 

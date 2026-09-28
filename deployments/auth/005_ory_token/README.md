@@ -20,7 +20,8 @@ Keto 授权
 xhs_service
 ```
 
-当前只完成部署设计，尚未创建 Docker Compose、Talos 配置或 Token Manager 服务。
+当前已经创建 Docker Compose、Talos 配置和 Token Manager 服务；Token Manager 的网关接入
+留到后续步骤。
 本目录不会修改 deployments/auth/003_keto。
 
 ## 组件职责
@@ -49,14 +50,14 @@ Talos 证明 API Token 属于哪个主体；Keto 判断该主体是否拥有目�
 
 Kratos 和 Keto 使用 PostgreSQL；Talos OSS 按当前版本限制使用独立 SQLite：
 
-~~~text
+```text
 PostgreSQL
 ├── ory  → Kratos
 └── keto → Keto
 
 SQLite Volume
 └── Talos
-~~~
+```
 
 ## 端口规划
 
@@ -138,7 +139,7 @@ Health 和 Metrics 接口。Talos OSS 不能使用 PostgreSQL；商业版再单�
 
 本步骤只验证 Talos 签发和校验 API Token：
 
-~~~text
+```text
 Talos issuedApiKeys
     ↓
 API Token
@@ -146,23 +147,59 @@ API Token
 Talos apiKeys:verify
     ↓
 actor_id、scopes、expires_at
-~~~
+```
 
 此时 Oathkeeper 尚未接入 Talos，因此 API Token 还不能直接访问 xhs_service。
 访问业务接口放在 Step 5。
 
 执行：
 
-~~~shell
+```shell
 docker compose -f deployments/auth/005_ory_token/docker-compose.yml run --rm talos-seed
-~~~
+```
 
 脚本会把完整 Secret 输出一次。只用于本地教学，不能把日志中的 Secret 用于生产。
 
 ### Step 3：实现 Token Manager
 
-实现用户 Token 的创建、查询、撤销和轮换。Token Manager 不保存可恢复的完整
-Token，不向浏览器暴露 Talos Admin API。
+Token Manager 监听 `8090`，提供用户 API Token 的创建、查询、撤销和轮换。它通过 Kratos
+`sessions/whoami` 识别用户，通过 Talos Admin API 管理密钥；PostgreSQL 中只保存元数据和
+Talos `key_id`，Secret 只在创建或轮换响应中返回一次。
+
+Token Manager 元数据示例：
+
+```json
+{
+  "id": "tm_1740000000000000000",
+  "owner_identity_id": "kratos-identity-id-alice",
+  "talos_key_id": "01JEXAMPLEKEYID00000000001",
+  "name": "alice-cli",
+  "scopes": ["xhs.read", "xhs.crawl.start"],
+  "status": "KEY_STATUS_ACTIVE"
+}
+```
+
+Talos 中对应的 API Key 元数据使用同一个 `key_id`，但实际 Secret 只在签发或轮换
+响应中出现一次：
+
+```json
+{
+  "key_id": "01JEXAMPLEKEYID00000000001",
+  "actor_id": "User:kratos-identity-id-alice",
+  "status": "KEY_STATUS_ACTIVE",
+  "scopes": ["xhs.read", "xhs.crawl.start"]
+}
+```
+
+`token_manager.id` 是业务管理 ID，`talos_key_id` 是关联 Talos 的外部 ID，`secret` 才是
+CLI 或服务实际使用的凭证；`key_id` 不能代替 `secret`。
+
+接口：
+
+- `POST http://192.168.2.41:8090/v1/auth/tokens`
+- `GET http://192.168.2.41:8090/v1/auth/tokens`
+- `POST http://192.168.2.41:8090/v1/auth/tokens/{id}/revoke`
+- `POST http://192.168.2.41:8090/v1/auth/tokens/{id}/rotate`
 
 ### Step 4：接入用户 API Token
 

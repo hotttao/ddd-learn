@@ -18,6 +18,24 @@ services:
       # 第一次初始化时创建 Keto 数据库和独立数据库用户。
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
 
+  token-manager-db-init:
+    # PostgreSQL 初始化脚本只在新数据卷执行；这个 Job 对已有数据卷也安全。
+    image: m.daocloud.io/docker.io/library/postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        if ! psql -h postgres -U ory -d ory -tAc "SELECT 1 FROM pg_roles WHERE rolname='token_manager'" | grep -q 1; then
+          psql -h postgres -U ory -d ory -v ON_ERROR_STOP=1 -c "CREATE USER token_manager WITH PASSWORD 'token_manager'";
+        fi;
+        if ! psql -h postgres -U ory -d ory -tAc "SELECT 1 FROM pg_database WHERE datname='token_manager'" | grep -q 1; then
+          psql -h postgres -U ory -d ory -v ON_ERROR_STOP=1 -c "CREATE DATABASE token_manager OWNER token_manager";
+        fi
+    environment:
+      PGPASSWORD: ory
+
   talos-migrate:
     # Talos OSS 使用 SQLite；该一次性 Job 初始化 Talos 数据库表。
     image: ghcr.io/hotttao/ory-talos:v26.2.0
@@ -65,6 +83,30 @@ services:
       TALOS_URL: http://talos:4420
     volumes:
       - ./talos:/etc/config/talos:ro
+
+  token-manager:
+    # 用户 API Token 管理面：校验 Kratos Session，再调用内网 Talos Admin API。
+    build:
+      context: ../../..
+      dockerfile: token_manager/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      token-manager-db-init:
+        condition: service_completed_successfully
+      kratos:
+        condition: service_started
+      talos:
+        condition: service_started
+    environment:
+      # 元数据单独使用 token_manager 数据库；明文 Secret 不写入数据库。
+      TOKEN_MANAGER_DATABASE_DSN: postgres://token_manager:token_manager@postgres:5432/token_manager?sslmode=disable
+      KRATOS_PUBLIC_URL: http://kratos:4433
+      TALOS_URL: http://talos:4420
+      TOKEN_MANAGER_ADDR: :8090
+    ports:
+      # 当前步骤直接暴露管理 API，后续步骤再接入 Oathkeeper/网关。
+      - "192.168.2.41:8090:8090"
 
   keto-migrate:
     # 创建 Keto 所需的数据库表和索引；这是一次性 Compose Job。
