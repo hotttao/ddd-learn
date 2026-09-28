@@ -211,6 +211,23 @@ CLI 或服务实际使用的凭证；`key_id` 不能代替 `secret`。
 
 ### Step 5：接入 Oathkeeper
 
+Oathkeeper 使用内置 `bearer_token` Authenticator，把 `Authorization: Bearer <api-token>`
+转交给 Token Manager 的内网校验接口；Token Manager 调用 Talos `apiKeys:verify`，再由
+Oathkeeper 的 `id_token` Mutator 生成下游 Internal JWT。校验接口没有 Traefik 路由，
+不会直接暴露给浏览器。
+
+验证 Decision API：
+
+```shell
+curl -i http://192.168.2.41:4456/decisions \
+  -H 'Authorization: Bearer <talos-api-token>' \
+  -H 'X-Forwarded-Method: GET' \
+  -H 'X-Forwarded-Uri: /v1/xhs/content' \
+  -H 'X-Forwarded-Host: 192.168.2.41:8080'
+```
+
+`200` 且响应包含 `Authorization` Header，表示 Talos API Token 已转换为 Internal JWT。
+
 保留两条认证链路：
 
 ```text

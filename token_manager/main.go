@@ -74,6 +74,15 @@ type talosRotateResponse struct {
 	Secret       string         `json:"secret"`
 }
 
+type talosVerifyResponse struct {
+	IsValid      bool      `json:"is_valid"`
+	KeyID        string    `json:"key_id"`
+	ActorID      string    `json:"actor_id"`
+	Scopes       []string  `json:"scopes"`
+	ExpireTime   time.Time `json:"expire_time"`
+	ErrorMessage string    `json:"error_message"`
+}
+
 func main() {
 	cfg := Config{
 		ListenAddr:  env("TOKEN_MANAGER_ADDR", ":8090"),
@@ -103,6 +112,8 @@ func main() {
 	// Hertz 路由参数以斜线结束；动作名称使用最后一段路径表达。
 	h.POST("/v1/auth/tokens/:id/revoke", m.revoke)
 	h.POST("/v1/auth/tokens/:id/rotate", m.rotate)
+	// 仅供 Oathkeeper 内网 bearer_token authenticator 调用，不对外配置 Traefik 路由。
+	h.GET("/internal/auth/token/verify", m.verify)
 
 	log.Printf("token-manager: listening on %s", cfg.ListenAddr)
 	h.Spin()
@@ -219,6 +230,43 @@ func (m *TokenManager) rotate(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	c.JSON(http.StatusCreated, utils.H{"token": newRecord, "secret": rotated.Secret, "replaced_token_id": r.ID})
+}
+
+func (m *TokenManager) verify(ctx context.Context, c *app.RequestContext) {
+	authorization := strings.TrimSpace(string(c.GetHeader("Authorization")))
+	if authorization == "" {
+		writeError(c, http.StatusUnauthorized, errors.New("authorization header is required"))
+		return
+	}
+	parts := strings.Fields(authorization)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		writeError(c, http.StatusUnauthorized, errors.New("authorization must use Bearer scheme"))
+		return
+	}
+	var verified talosVerifyResponse
+	if err := m.talosJSON(ctx, http.MethodPost, "/v2alpha1/admin/apiKeys:verify", map[string]string{"credential": parts[1]}, &verified); err != nil {
+		writeError(c, http.StatusUnauthorized, err)
+		return
+	}
+	if !verified.IsValid || verified.ActorID == "" {
+		message := verified.ErrorMessage
+		if message == "" {
+			message = "api token is invalid"
+		}
+		writeError(c, http.StatusUnauthorized, errors.New(message))
+		return
+	}
+	// bearer_token authenticator 只要求 subject/extra；Oathkeeper 后续会用 subject 签发 Internal JWT。
+	c.JSON(http.StatusOK, utils.H{
+		"subject": verified.ActorID,
+		"extra": utils.H{
+			"actor_id":    verified.ActorID,
+			"key_id":      verified.KeyID,
+			"scopes":      verified.Scopes,
+			"expire_time": verified.ExpireTime,
+			"auth_source": "talos",
+		},
+	})
 }
 
 func (m *TokenManager) currentUser(c *app.RequestContext) (string, error) {

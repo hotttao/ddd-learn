@@ -218,6 +218,8 @@ services:
     depends_on:
       kratos:
         condition: service_started
+      token-manager:
+        condition: service_started
     volumes:
       # Oathkeeper 读取本模块自己的配置和 Access Rules。
       - ./oathkeeper/config.yaml:/etc/oathkeeper/config.yaml:ro

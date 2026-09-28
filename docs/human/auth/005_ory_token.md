@@ -369,6 +369,45 @@ Kratos Cookie → Oathkeeper → Internal JWT → xhs_service
 API Token      → Talos      → Internal JWT → xhs_service
 ```
 
+本步骤使用 Oathkeeper 内置的 `bearer_token` Authenticator：Oathkeeper 从
+`Authorization: Bearer <api-token>` 提取凭证，调用 Token Manager 的内网校验接口；
+Token Manager 再调用 Talos `POST /v2alpha1/admin/apiKeys:verify`。Talos 返回有效的
+`actor_id` 和 Scope 后，Oathkeeper 的 `id_token` Mutator 统一生成 Internal JWT。
+Token Manager 的校验接口不配置 Traefik 路由，浏览器不能直接访问。
+
+实际处理顺序：
+
+```text
+CLI/服务
+  │ Authorization: Bearer ddd_...
+  ▼
+Traefik /v1/*
+  ▼ ForwardAuth
+Oathkeeper /decisions
+  ▼ bearer_token Authenticator
+Token Manager /internal/auth/token/verify
+  ▼ POST /v2alpha1/admin/apiKeys:verify
+Talos
+  └─ 返回 actor_id、scopes、expire_time
+  ▼
+Oathkeeper id_token Mutator
+  └─ 返回 Authorization: Bearer <internal-jwt>
+```
+
+验证命令（命令只检查状态，不打印 API Secret）：
+
+```shell
+curl -i http://192.168.2.41:4456/decisions \
+  -H 'Authorization: Bearer <talos-api-token>' \
+  -H 'X-Forwarded-Method: GET' \
+  -H 'X-Forwarded-Uri: /v1/xhs/content' \
+  -H 'X-Forwarded-Host: 192.168.2.41:8080'
+```
+
+响应为 `200` 且包含 `Authorization` 响应头时，说明 API Token 已被 Talos 验证，并已
+转换为下游使用的 Internal JWT。此时 `sub` 使用 Talos 返回的 `actor_id`，而不是把
+API Token 原文放入 JWT。
+
 ### Step 6：接入 Keto 业务权限
 
 验证 Alice、Bob 和内部服务的权限矩阵：

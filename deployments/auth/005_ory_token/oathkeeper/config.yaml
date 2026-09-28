@@ -29,6 +29,17 @@ authenticators:
       # 只接受 Kratos 的 Session Cookie，不接受任意 Cookie。
       only:
         - ory_kratos_session
+  bearer_token:
+    # 读取 Authorization: Bearer <Talos API Key>，并向 Token Manager 查询凭证。
+    enabled: true
+    config:
+      check_session_url: http://token-manager:8090/internal/auth/token/verify
+      # Talos 当前配置的 API Key 前缀为 ddd；其他 Bearer Token 不由此认证器处理。
+      prefix: ddd_
+      preserve_path: true
+      force_method: GET
+      subject_from: subject
+      extra_from: extra
 
 authorizers:
   allow:

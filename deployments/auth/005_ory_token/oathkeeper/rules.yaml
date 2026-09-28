@@ -15,8 +15,10 @@
       - DELETE
 
   authenticators:
-    - # 通过 Kratos /sessions/whoami 验证 Session Cookie。
+    - # 浏览器请求优先通过 Kratos /sessions/whoami 验证 Session Cookie。
       handler: cookie_session
+    - # CLI/服务请求通过 Token Manager -> Talos 验证 Bearer API Token。
+      handler: bearer_token
 
   authorizer:
     # 只判断是否已认证；业务权限由各自的业务服务判断。
