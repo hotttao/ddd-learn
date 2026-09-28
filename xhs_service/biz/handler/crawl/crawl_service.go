@@ -41,7 +41,7 @@ func StartCrawlTask(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	task, err := crawlService.StartTask(ctx, service.StartTaskCommand{
-		Subject: principal.Subject, OrganizationID: req.GetOrganizationId(), Keywords: req.GetTask().GetKeywords(),
+		Subject: principal.Subject, Scopes: principal.Scopes, OrganizationID: req.GetOrganizationId(), Keywords: req.GetTask().GetKeywords(),
 	})
 	if err != nil {
 		writeServiceError(c, err)
@@ -67,7 +67,7 @@ func ListCrawlContents(ctx context.Context, c *app.RequestContext) {
 		writeServiceError(c, service.ErrUnauthenticated)
 		return
 	}
-	contents, err := crawlService.ListContents(ctx, service.OrganizationQuery{Subject: principal.Subject, OrganizationID: req.GetOrganizationId()})
+	contents, err := crawlService.ListContents(ctx, service.OrganizationQuery{Subject: principal.Subject, Scopes: principal.Scopes, OrganizationID: req.GetOrganizationId()})
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -95,7 +95,7 @@ func GetKeywords(ctx context.Context, c *app.RequestContext) {
 		writeServiceError(c, service.ErrUnauthenticated)
 		return
 	}
-	keywords, err := crawlService.GetKeywords(ctx, service.OrganizationQuery{Subject: principal.Subject, OrganizationID: req.GetOrganizationId()})
+	keywords, err := crawlService.GetKeywords(ctx, service.OrganizationQuery{Subject: principal.Subject, Scopes: principal.Scopes, OrganizationID: req.GetOrganizationId()})
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -126,7 +126,7 @@ func UpdateKeywords(ctx context.Context, c *app.RequestContext) {
 		writeServiceError(c, service.ErrUnauthenticated)
 		return
 	}
-	keywords, err := crawlService.UpdateKeywords(ctx, service.UpdateKeywordsCommand{Subject: principal.Subject, OrganizationID: req.GetOrganizationId(), Keywords: req.GetKeywords().GetValues()})
+	keywords, err := crawlService.UpdateKeywords(ctx, service.UpdateKeywordsCommand{Subject: principal.Subject, Scopes: principal.Scopes, OrganizationID: req.GetOrganizationId(), Keywords: req.GetKeywords().GetValues()})
 	if err != nil {
 		writeServiceError(c, err)
 		return

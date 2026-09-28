@@ -19,6 +19,7 @@ var ErrInvalidToken = errors.New("invalid internal JWT")
 // Dynamic roles and resource permissions intentionally do not belong here.
 type Principal struct {
 	Subject               string
+	Scopes                []string
 	SessionID             string
 	AuthenticationMethods []string
 	ClientID              string
@@ -45,6 +46,7 @@ type privateClaims struct {
 	AuthenticationMethods []string `json:"amr,omitempty"`
 	ClientID              string   `json:"client_id,omitempty"`
 	ServiceActor          string   `json:"service_actor,omitempty"`
+	Scopes                []string `json:"scopes,omitempty"`
 }
 
 // Validator maintains a cached public JWK set and refreshes it for rotations.
@@ -170,6 +172,7 @@ func (v *Validator) validateClaims(claims jwt.Claims, extra privateClaims) (Prin
 	}
 	return Principal{
 		Subject:               subject,
+		Scopes:                append([]string(nil), extra.Scopes...),
 		SessionID:             extra.SessionID,
 		AuthenticationMethods: append([]string(nil), extra.AuthenticationMethods...),
 		ClientID:              extra.ClientID,

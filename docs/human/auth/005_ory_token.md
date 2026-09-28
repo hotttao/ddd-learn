@@ -410,6 +410,29 @@ API Token 原文放入 JWT。
 
 ### Step 6：接入 Keto 业务权限
 
+本步骤把 API Token 的两个维度同时带入业务授权：Talos 返回的 Scope 是凭证能力上限，
+Keto 检查 `actor` 在组织中的实际权限。Oathkeeper 将验证结果中的 `scopes` 写入
+Internal JWT；xhs_service 先检查当前操作所需 Scope，再以统一的 `User:<identity-id>`
+主体请求 Keto。浏览器 Session 没有 Scope 时，仍由 Keto 决定用户权限。
+
+对应关系：
+
+| xhs 操作 | 必需 Scope | Keto Relation |
+| --- | --- | --- |
+| 启动抓取任务 | `xhs.crawl.start` | `start_crawl` |
+| 查看抓取内容/关键词 | `xhs.read` | `view_content` |
+| 修改抓取关键词 | `xhs.crawl.keywords` | `modify_keywords` |
+
+最终判断为：
+
+```text
+没有 API Token Scope 时：Keto 允许
+有 API Token Scope 时：Scope 包含当前操作 && Keto 允许
+```
+
+这样 Scope 只能缩小 Token 的能力，不能绕过组织和角色关系；Alice/Bob 的组织角色
+仍然由 Keto Relation Tuple 管理。
+
 验证 Alice、Bob 和内部服务的权限矩阵：
 
 ```text

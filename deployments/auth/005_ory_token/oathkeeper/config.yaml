@@ -61,7 +61,8 @@ mutators:
       claims: |
         {
           "aud": ["internal-api"],
-          "principal_type": "user"
+          "principal_type": "user",
+          "scopes": {{ toJson .Extra.scopes }}
         }
 
 errors:
