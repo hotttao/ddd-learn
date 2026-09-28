@@ -448,7 +448,7 @@ social-service + xhs.read     → 按 Keto 结果决定
 
 本步骤增加：
 
-- `talos/derived-jwks.json`：Talos 用于签发派生 JWT 的 Ed25519 JWKS；私钥只挂载给 Talos。
+- `talos/derived-jwks.json`：Talos 用于签发派生 JWT 的 RSA/RS256 JWKS；私钥只挂载给 Talos。
 - `credentials.derived_tokens`：默认有效期 15 分钟，并显式指定 `kid`。
 - `GET /v2alpha1/derivedKeys/jwks.json`：发布只包含公钥的 JWKS，供验证方本地验签。
 - `POST /v2alpha1/admin/apiKeys:derive`：用长期 API Token 派生 JWT。
@@ -470,10 +470,54 @@ social-service + xhs.read     → 按 Keto 结果决定
 
 派生 JWT 必须设置较短 TTL，不能把长期 API Token 直接换成另一个长期 Token。
 
+### Step 7.1：Gateway 本地验证派生 JWT
+
+为 Oathkeeper 增加 `jwt` Authenticator：
+
+```text
+派生 JWT
+  ↓
+Oathkeeper 从 Talos JWKS 获取公钥
+  ↓ 本地校验签名、issuer、算法和 exp
+Oathkeeper id_token Mutator
+  ↓
+Internal JWT
+  ↓
+xhs_service
+```
+
+Talos 派生 JWT 的 `sub` 是父 Key ID，真实调用主体在 `act` Claim 中。因此 Oathkeeper
+把 `act` 映射为 Internal JWT 的 `service_actor`，`serverhertz/jwt` 再将它恢复成业务
+主体；不能直接把派生 JWT 的 `sub` 当作 Keto 主体。
+
+本步骤不再调用 Token Manager `/internal/auth/token/verify`，所以撤销父 API Key 不会
+立即影响已经签发的派生 JWT，仍然要依赖短 TTL。
+
 ### Step 8：增加管理员管理和审计
 
 增加管理员查询、创建、撤销、轮换接口，记录操作人、Token 主体、Scope、组织、
 撤销原因和时间。
+
+### Step 9：使用 Kratos Session Tokenizer 生成用户 JWT
+
+在用户已经通过 Kratos 登录并建立 Session 后，使用
+`/sessions/whoami?tokenize_as=<template>` 将 Session 转换为短期 JWT，
+再由 Oathkeeper 使用本地 JWKS 验签。后续请求不再调用 Kratos
+`/sessions/whoami`，但 JWT 过期前也不会实时感知 Session 注销或撤销。
+
+```text
+Kratos Session Cookie
+  ↓ 首次换取
+Kratos Session Tokenizer
+  ↓ 用户 JWT
+Oathkeeper 本地 JWKS 验签
+  ↓
+Internal JWT
+  ↓
+xhs_service
+```
+
+本步骤只在 Step 8 完成后实现。
 
 ## 十、部署目录
 

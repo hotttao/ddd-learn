@@ -40,6 +40,19 @@ authenticators:
       force_method: GET
       subject_from: subject
       extra_from: extra
+  jwt:
+    # 对 Talos 派生 JWT 做本地验签，不再为每个请求调用 Token Manager。
+    enabled: true
+    config:
+      # Talos 只发布公钥；Oathkeeper 不需要访问派生 JWT 私钥。
+      jwks_urls:
+        # Talos API 的响应带有 {"jwks": ...} 包装；Oathkeeper 使用挂载的标准 JWKS。
+        - file:///etc/oathkeeper/derived-jwks.json
+      # 必须限制签发者和算法，不能只依赖签名成功。
+      trusted_issuers:
+        - http://192.168.2.41:4420
+      allowed_algorithms:
+        - RS256
 
 authorizers:
   allow:
@@ -62,7 +75,9 @@ mutators:
         {
           "aud": ["internal-api"],
           "principal_type": "user",
-          "scopes": {{ toJson .Extra.scopes }}
+          "amr": {{ if or .Extra.act .Extra.actor_id }}["service_token"]{{ else }}[]{{ end }},
+          "service_actor": "{{ if .Extra.act }}{{ print .Extra.act }}{{ else }}{{ print .Extra.actor_id }}{{ end }}",
+          "scopes": {{ if .Extra.scp }}{{ toJson .Extra.scp }}{{ else }}{{ toJson .Extra.scopes }}{{ end }}
         }
 
 errors:

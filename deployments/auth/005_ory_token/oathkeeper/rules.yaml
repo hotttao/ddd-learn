@@ -15,7 +15,9 @@
       - DELETE
 
   authenticators:
-    - # 浏览器请求优先通过 Kratos /sessions/whoami 验证 Session Cookie。
+    - # Talos 派生 JWT 由 Oathkeeper 使用 JWKS 本地验证。
+      handler: jwt
+    - # 浏览器请求通过 Kratos /sessions/whoami 验证 Session Cookie。
       handler: cookie_session
     - # CLI/服务请求通过 Token Manager -> Talos 验证 Bearer API Token。
       handler: bearer_token

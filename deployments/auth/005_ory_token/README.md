@@ -246,14 +246,15 @@ API Token 的 Scope 作为能力上限写入 Internal JWT，xhs_service 再将�
 
 ### Step 7：增加派生短期 Token
 
-Talos 根据长期 API Key 签发短期 JWT。本步骤使用 Ed25519 JWKS：
+Talos 根据长期 API Key 签发短期 JWT。本步骤使用 RSA/RS256 JWKS。Oathkeeper
+当前版本的 JWT Authenticator 支持 RS256，因此这里使用 RS256：
 
 ```text
 talos/derived-jwks.json
         │ 私钥只挂载给 Talos
         ▼
 Talos /v2alpha1/admin/apiKeys:derive
-        │ 短期 JWT
+        │ 短期 RS256 JWT
         ▼
 Gateway 使用 /v2alpha1/derivedKeys/jwks.json 的公钥本地验签
 ```
@@ -267,9 +268,39 @@ Gateway 使用 /v2alpha1/derivedKeys/jwks.json 的公钥本地验签
 因此生产环境应使用短 TTL；如果要求实时撤销，则继续在请求链路调用 Talos `verify`，
 不要只依赖派生 JWT 本地验签。
 
+### Step 7.1：Gateway 本地验证派生 JWT
+
+Oathkeeper 新增 `jwt` Authenticator，使用：
+
+```text
+http://talos:4420/v2alpha1/derivedKeys/jwks.json
+```
+
+验证派生 JWT。请求不再经过 Token Manager 的 `/internal/auth/token/verify`。由于 Talos
+JWT 的 `sub` 是父 Key ID，Oathkeeper 会将 `act` 映射到 Internal JWT 的 `service_actor`，
+避免业务服务把父 Key ID 当成用户主体。
+
 ### Step 8：完成审计和生命周期验证
 
 验证 Token 创建、查询、轮换、撤销、过期、用户禁用和管理员操作审计。
+
+### Step 9：使用 Kratos Session Tokenizer 生成用户 JWT
+
+用户登录后，Kratos 仍然创建 Session；通过
+`/sessions/whoami?tokenize_as=<template>` 将已验证的 Session 转换为短期 JWT。
+Oathkeeper 使用对应的本地 JWKS 验签，后续请求不再调用 Kratos `/sessions/whoami`。
+
+```text
+Kratos Session Cookie
+  → Kratos Session Tokenizer
+  → 用户 JWT
+  → Oathkeeper 本地 JWKS 验签
+  → Internal JWT
+  → xhs_service
+```
+
+该步骤放在最后实现；JWT 是自包含凭证，Session 注销不会立即撤销已经签发的 JWT，
+必须通过较短 TTL 控制风险。
 
 ## 目录规划
 

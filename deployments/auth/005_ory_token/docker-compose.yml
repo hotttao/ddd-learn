@@ -228,6 +228,8 @@ services:
       - ./oathkeeper/rules.yaml:/etc/oathkeeper/rules.yaml:ro
       # 只有 Oathkeeper 能读取包含私钥的 JWKS 文件。
       - ./jwks/id_token.jwks.json:/etc/oathkeeper/id_token.jwks.json:ro
+      # JWT Authenticator 只读取标准 JWKS 公钥，不读取 Talos 的签名私钥。
+      - ./oathkeeper/derived-jwks.json:/etc/oathkeeper/derived-jwks.json:ro
     ports:
       # 教学环境绑定局域网，方便查看 JWKS；生产环境应只允许内部网络访问。
       - "192.168.2.41:4456:4456"
